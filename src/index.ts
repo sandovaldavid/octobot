@@ -5,6 +5,7 @@ import { connectDB } from '@config/databaseConfig';
 import { debug, httpLogger, logger } from '@utils/logger.ts';
 import { repositoryService } from '@services/github/repositoryService';
 import repositoryRoutes from '@routes/repositoryRoutes';
+import issueRoutes from '@routes/issueRoutes';
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api', repositoryRoutes);
+app.use('/api', issueRoutes);
 
 app.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}`);
