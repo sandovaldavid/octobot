@@ -13,7 +13,6 @@ export const webhookController = {
             const rawBody = JSON.stringify(req.body);
 
             debug.info(`Received webhook event: ${event}`);
-            debug.info(`Raw payload: ${rawBody}`);
 
             // Verify webhook signature
             const secret = process.env.GITHUB_WEBHOOK_SECRET;
