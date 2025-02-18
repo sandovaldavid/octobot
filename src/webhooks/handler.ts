@@ -1,5 +1,7 @@
 import { WebhookModel } from '@models/webhook';
+import { RepositoryModel } from '@models/repository';
 import { discordService } from '@services/discordService';
+import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
 import { DiscordColors } from '@types/discordTypes';
 
@@ -205,3 +207,39 @@ async function handleDeleteEvent(channelId: string, payload: any) {
 
     await discordService.sendNotification(channelId, notification);
 }
+
+export const handleRepositoryWebhook = async (repoName: string) => {
+    try {
+        const repository = await RepositoryModel.findOne({ name: repoName });
+        if (!repository) {
+            throw new Error(`Repository ${repoName} not found`);
+        }
+
+        // Configure webhook for the repository
+        const webhookResult = await webhookService.configureWebhook(repoName);
+        if (!webhookResult.success) {
+            throw new Error(`Failed to configure webhook: ${webhookResult.error}`);
+        }
+
+        // Update repository webhook status
+        await RepositoryModel.findOneAndUpdate(
+            { name: repoName },
+            {
+                webhookActive: true,
+                webhookSettings: {
+                    events: ['push', 'pull_request', 'issues', 'release', 'create', 'delete'],
+                    channelId: process.env.DISCORD_CHANNEL_ID,
+                },
+            }
+        );
+
+        debug.info(`Webhook configured successfully for repository: ${repoName}`);
+        return {
+            success: true,
+            message: `Webhook configured for ${repoName}`,
+        };
+    } catch (error) {
+        debug.error('Error configuring repository webhook:', error);
+        throw error;
+    }
+};
