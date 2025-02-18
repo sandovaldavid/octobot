@@ -1,5 +1,6 @@
 import { Octokit } from 'octokit';
 import { debug } from '@utils/logger';
+import { webhookService } from '@services/github/webhookService';
 
 interface GitHubConfig {
     token: string;
@@ -35,6 +36,33 @@ class GitHubClient {
 
     public getConfig(): GitHubConfig {
         return this.config;
+    }
+
+    public async testWebhookConnection(): Promise<boolean> {
+        try {
+            const webhookResult = await webhookService.configureWebhook(this.config.repo);
+            if (!webhookResult.success) {
+                throw new Error(`Failed to configure webhook: ${webhookResult.error}`);
+            }
+
+            const { data: webhooks } = await this.octokit.rest.repos.listWebhooks({
+                owner: this.config.owner,
+                repo: this.config.repo,
+            });
+
+            const webhookUrl = `${process.env.API_URL}/webhooks/github`;
+            const webhookExists = webhooks.some((webhook) => webhook.config.url === webhookUrl && webhook.active);
+
+            if (!webhookExists) {
+                throw new Error('Webhook not found or inactive');
+            }
+
+            debug.info('GitHub webhook configured and active');
+            return true;
+        } catch (error) {
+            debug.error('Webhook connection test failed:', error);
+            return false;
+        }
     }
 }
 
