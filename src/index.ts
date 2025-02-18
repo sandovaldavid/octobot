@@ -6,35 +6,42 @@ import { connectDB } from '@config/databaseConfig';
 import { discordClient } from '@config/discordConfig';
 import { debug, logger } from '@utils/logger';
 import { githubClient } from '@config/githubConfig';
+import { commandRegistry } from '@commands/index';
 import repositoryRoutes from '@routes/repositoryRoutes';
 import issueRoutes from '@routes/issueRoutes';
 import webhookRoutes from '@routes/webhookRoutes';
-import { repositoryService } from '@services/github/repositoryService';
-import { watch } from '@commands/watch/watch';
 
 dotenv.config();
 
 const client = discordClient.getClient();
 
-// Handle commands through registry
-client.on('interactionCreate', async (interaction) => {
-    await commandRegistry.handleCommand(interaction);
-});
-
 const initializeServices = async () => {
     try {
+        // Connect to database
         await connectDB();
 
+        // Test Discord connection
         const discordConnected = await discordClient.testConnection();
         if (!discordConnected) {
             throw new Error('Failed to connect to Discord');
         }
 
+        // Register slash commands
+        const commands = Array.from(commandRegistry.getCommands().values()).map((cmd) => cmd.data.toJSON());
+        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN!);
+
+        await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID!, process.env.DISCORD_GUILD_ID!), {
+            body: commands,
+        });
+        debug.info('Slash commands registered successfully');
+
+        // Test webhook connection
         const webhookConnected = await githubClient.testWebhookConnection();
         if (!webhookConnected) {
             logger.warn('Webhook configuration failed - Some notifications may not work');
         }
 
+        // Setup Express server
         const app = express();
         const PORT = process.env.PORT || 4000;
 
@@ -42,36 +49,27 @@ const initializeServices = async () => {
         app.use(express.json());
 
         // Routes
-        app.get('/', (req, res) => {
-            res.status(200).json({
-                status: 'success',
-                message: 'OctoBot API',
-                version: '1.0.0',
-                docs: '/api-docs',
-                favicon: '/favicon.ico',
-                endpoints: {},
-            });
-        });
+        app.use('/api', repositoryRoutes);
+        app.use('/api', issueRoutes);
+        app.use('/api', webhookRoutes);
 
+        // Health check endpoint
         app.get('/health', (req, res) => {
             res.json({
                 status: 'OK',
                 timestamp: new Date().toISOString(),
-                discord: discordClient.getClient().isReady() ? 'Connected' : 'Disconnected',
+                discord: client.isReady() ? 'Connected' : 'Disconnected',
                 webhook: webhookConnected ? 'Configured' : 'Not Configured',
                 database: 'Connected',
             });
         });
 
-        app.use('/api', repositoryRoutes);
-        app.use('/api', issueRoutes);
-        app.use('/api', webhookRoutes);
-
+        // Start server
         app.listen(PORT, () => {
             logger.info(`Server running on port ${PORT}`);
             logger.info('Service Status:');
-            logger.info(`- Database: Connected`);
-            logger.info(`- Discord: ${discordClient.getClient().isReady() ? 'Connected' : 'Disconnected'}`);
+            logger.info('- Database: Connected');
+            logger.info(`- Discord: ${client.isReady() ? 'Connected' : 'Disconnected'}`);
             logger.info(`- Webhook: ${webhookConnected ? 'Configured' : 'Not Configured'}`);
         });
     } catch (error) {
@@ -80,6 +78,17 @@ const initializeServices = async () => {
     }
 };
 
+// Register Discord event handlers
+client.once('ready', () => {
+    debug.info(`Bot is ready as ${client.user?.tag}`);
+});
+
+// Single interactionCreate handler
+client.on('interactionCreate', async (interaction) => {
+    await commandRegistry.handleCommand(interaction);
+});
+
+// Start the application
 initializeServices().catch((error) => {
     logger.error('Initialization error:', error);
     process.exit(1);
