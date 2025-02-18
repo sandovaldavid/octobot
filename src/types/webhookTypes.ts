@@ -5,8 +5,12 @@ export const WEBHOOK_EVENTS = [
     'release',
     'create',
     'delete',
-    'watch',
-    'fork',
+    'workflow_run',
+    'workflow_job',
+    'check_run',
+    'deployment',
+    'deployment_status',
+    'status',
 ] as const;
 
 export type WebhookEventType = (typeof WEBHOOK_EVENTS)[number];
