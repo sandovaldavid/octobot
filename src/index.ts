@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { connectDB } from '@config/database.ts';
+import { connectDB } from '@config/databaseConfig';
 import { debug, httpLogger, logger } from '@utils/logger.ts';
+import { repositoryService } from '@services/github/repositoryService';
+import repositoryRoutes from '@routes/repositoryRoutes';
 
 dotenv.config();
 
@@ -30,6 +32,8 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
+
+app.use('/api', repositoryRoutes);
 
 app.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}`);
