@@ -92,7 +92,6 @@ const issueSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-issueSchema.index({ githubId: 1 });
 issueSchema.index({ number: 1 });
 issueSchema.index({ state: 1 });
 issueSchema.index({ 'repository.full_name': 1 });
