@@ -52,6 +52,52 @@ export const repositoryService = {
         });
     },
 
+    async syncRepositories(): Promise<GithubApiResponse<GithubRepository[]>> {
+        try {
+            const { success, data } = await this.getAllRepositories();
+            if (!success || !data) {
+                throw new Error('Failed to fetch repositories');
+            }
+
+            const result = await Promise.all(
+                data.map(async (repo) => {
+                    const repositoryData = {
+                        githubId: repo.id,
+                        name: repo.name,
+                        fullName: repo.full_name,
+                        description: repo.description || '',
+                        url: repo.html_url,
+                        isPrivate: repo.private,
+                        language: repo.language,
+                        stars: repo.stargazers_count,
+                        forks: repo.forks_count,
+                        defaultBranch: repo.default_branch,
+                        createdAt: new Date(repo.created_at),
+                        updatedAt: new Date(repo.updated_at),
+                        topics: repo.topics,
+                        owner: {
+                            login: repo.owner.login,
+                            id: repo.owner.id,
+                            type: repo.owner.type,
+                            avatar_url: repo.owner.avatar_url,
+                        },
+                    };
+
+                    return await RepositoryModel.findOneAndUpdate({ githubId: repo.id }, repositoryData, {
+                        upsert: true,
+                        new: true,
+                    });
+                })
+            );
+
+            debug.info(`Synchronized ${result.length} repositories to database`);
+            return { success: true, data: result };
+        } catch (error) {
+            debug.error('Error syncing repositories:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
     mapRepositoryData(repo: any): GithubRepository {
         return {
             id: repo.id,
