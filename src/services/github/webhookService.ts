@@ -95,6 +95,51 @@ export class WebhookService {
             };
         }
     }
+
+    public async removeWebhook(repoName: string): Promise<GithubApiResponse<void>> {
+        try {
+            const octokit = githubClient.getOctokit();
+            const config = githubClient.getConfig();
+            const apiUrl = process.env.API_URL;
+
+            if (!apiUrl) {
+                throw new Error('API_URL is not defined in environment variables');
+            }
+
+            const webhookUrl = new URL('/api/webhooks/github', apiUrl).toString();
+
+            // Find existing webhook
+            const { data: webhooks } = await octokit.rest.repos.listWebhooks({
+                owner: config.owner,
+                repo: repoName,
+            });
+
+            const existingWebhook = webhooks.find((webhook) => webhook.config.url === webhookUrl);
+
+            if (!existingWebhook) {
+                return {
+                    success: true,
+                    message: 'No webhook found to remove',
+                };
+            }
+
+            // Remove webhook
+            await octokit.rest.repos.deleteWebhook({
+                owner: config.owner,
+                repo: repoName,
+                hook_id: existingWebhook.id,
+            });
+
+            debug.info(`Successfully removed webhook for ${repoName}`);
+            return { success: true };
+        } catch (error) {
+            debug.error('Error removing webhook:', error);
+            return {
+                success: false,
+                error: error.message || 'Unknown error occurred while removing webhook',
+            };
+        }
+    }
 }
 
 export const webhookService = WebhookService.getInstance();
