@@ -17,8 +17,6 @@ export const watch = {
         ),
 
     async execute(interaction: ChatInputCommandInteraction) {
-        if (!interaction.isCommand()) return;
-
         const subcommand = interaction.options.getSubcommand();
         if (subcommand !== 'watch') return;
 
@@ -31,8 +29,13 @@ export const watch = {
             // Configure webhook
             const webhookResult = await webhookService.configureWebhook(repoName);
             if (!webhookResult.success) {
-                debug.error(`Failed to configure webhook: ${webhookResult.error}`);
-                return interaction.editReply(`❌ Failed to configure webhook: ${webhookResult.error}`);
+                const errorMessage = webhookResult.error?.includes('does not exist')
+                    ? `❌ Repository \`${repoName}\` does not exist. Please check the name and try again.`
+                    : webhookResult.error?.includes('permission')
+                      ? `❌ No permission to configure webhooks for \`${repoName}\`. Make sure you have admin access.`
+                      : `❌ Failed to configure webhook: ${webhookResult.error}`;
+
+                return interaction.editReply(errorMessage);
             }
 
             // Update repository in database
@@ -52,7 +55,15 @@ export const watch = {
             await interaction.editReply(`✅ Now watching \`${repoName}\` for updates in this channel`);
         } catch (error) {
             debug.error('Error in watch command:', error);
-            await interaction.editReply('❌ Failed to configure repository webhook. Check logs for details.');
+            const errorMessage = error.message?.includes('commandRegistry')
+                ? '❌ Bot configuration error. Please contact the administrator.'
+                : '❌ Failed to configure repository webhook. Please try again later.';
+
+            if (interaction.deferred) {
+                await interaction.editReply(errorMessage);
+            } else {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
         }
     },
 };
