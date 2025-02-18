@@ -1,0 +1,58 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "types": [
+            "bun-types"
+        ],
+        "allowJs": true,
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "outDir": "dist",
+        "rootDir": "src",
+        "baseUrl": "src",
+        "paths": {
+            "@/*": [
+                "*"
+            ],
+            "@commands/*": [
+                "commands/*"
+            ],
+            "@config/*": [
+                "config/*"
+            ],
+            "@services/*": [
+                "services/*"
+            ],
+            "@types/*": [
+                "types/*"
+            ],
+            "@utils/*": [
+                "utils/*"
+            ],
+            "@webhooks/*": [
+                "webhooks/*"
+            ]
+        },
+        "resolveJsonModule": true,
+        "declaration": true,
+        "removeComments": true,
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "allowSyntheticDefaultImports": true,
+        "sourceMap": true,
+        "incremental": true,
+        "noImplicitAny": true
+    },
+    "include": [
+        "src/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "**/*.spec.ts"
+    ]
+}
