@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB } from '@config/databaseConfig';
+import { discordClient } from '@config/discordConfig';
 import { debug, httpLogger, logger } from '@utils/logger.ts';
 import { repositoryService } from '@services/github/repositoryService';
 import repositoryRoutes from '@routes/repositoryRoutes';
@@ -10,6 +11,12 @@ import issueRoutes from '@routes/issueRoutes';
 dotenv.config();
 
 connectDB();
+
+const discordConnected = await discordClient.testConnection();
+
+if (!discordConnected) {
+    throw new Error('Failed to connect to Discord');
+}
 
 const app = express();
 const PORT = process.env.PORT || 4000;
