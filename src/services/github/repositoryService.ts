@@ -366,6 +366,31 @@ export const repositoryService = {
         }
     },
 
+    async configureWebhook(repoName: string): Promise<GithubApiResponse<void>> {
+        try {
+            const octokit = githubClient.getOctokit();
+            const config = githubClient.getConfig();
+
+            await octokit.rest.repos.createWebhook({
+                owner: config.owner,
+                repo: repoName,
+                config: {
+                    url: `${process.env.API_URL}/webhooks/github`,
+                    content_type: 'json',
+                    secret: process.env.GITHUB_WEBHOOK_SECRET,
+                },
+                events: ['push', 'pull_request', 'issues', 'release', 'create', 'delete'],
+                active: true,
+            });
+
+            debug.info(`Configured webhook for ${repoName}`);
+            return { success: true };
+        } catch (error) {
+            debug.error('Error configuring webhook:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
     mapRepositoryData(repo: any): GithubRepository {
         return {
             id: repo.id,
