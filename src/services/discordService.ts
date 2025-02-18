@@ -46,18 +46,42 @@ export class DiscordService {
     }
 
     public createGithubNotification(options: GithubNotificationOptions): DiscordNotification {
-        const colors = {
-            issue: DiscordColors.INFO,
-            pull_request: DiscordColors.WARNING,
-            commit: DiscordColors.SUCCESS,
-            release: DiscordColors.DEFAULT,
-        };
+        let color: number;
+
+        switch (options.type) {
+            case 'commit':
+                color = DiscordColors.SUCCESS; // Verde para commits
+                break;
+            case 'create':
+                color =
+                    options.action === 'branch'
+                        ? DiscordColors.BRANCH // Amarillo para nuevas ramas
+                        : DiscordColors.DEFAULT; // Color por defecto para otros eventos create
+                break;
+            case 'pull_request':
+                color =
+                    options.action === 'merged'
+                        ? DiscordColors.PR_MERGED // Morado para PRs mergeados
+                        : DiscordColors.PR_OPEN; // Verde claro para PRs abiertos
+                break;
+            case 'issue':
+                color =
+                    options.action === 'closed'
+                        ? DiscordColors.ISSUE_CLOSED // Rojo para issues cerrados
+                        : DiscordColors.ISSUE_OPEN; // Azul para issues abiertos
+                break;
+            case 'release':
+                color = DiscordColors.INFO; // Azul claro para releases
+                break;
+            default:
+                color = DiscordColors.DEFAULT; // Color por defecto
+        }
 
         return {
             type: 'info',
             title: options.title,
             description: options.description,
-            color: options.color || colors[options.type],
+            color: options.color || color,
             fields: options.fields,
             timestamp: new Date(),
             author: {
