@@ -1,30 +1,87 @@
-import { githubClient } from '@config/github.config';
+import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
+import { GithubIssue, GithubApiResponse } from '@types/githubTypes';
 
-export const githubService = {
-    async getIssues(state: 'open' | 'closed' | 'all' = 'open') {
+export const issueService = {
+    async getIssues(
+        options: {
+            state?: 'open' | 'closed' | 'all';
+            labels?: string[];
+            since?: string;
+            page?: number;
+            per_page?: number;
+            sort?: 'created' | 'updated' | 'comments';
+            direction?: 'asc' | 'desc';
+        } = {}
+    ): Promise<GithubApiResponse<GithubIssue[]>> {
         try {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
+
+            const {
+                state = 'open',
+                labels,
+                since,
+                page = 1,
+                per_page = 100,
+                sort = 'updated',
+                direction = 'desc',
+            } = options;
 
             const { data } = await octokit.rest.issues.listForRepo({
                 owner: config.owner,
                 repo: config.repo,
                 state,
-                per_page: 100,
-                sort: 'updated',
-                direction: 'desc',
+                labels: labels?.join(','),
+                since,
+                page,
+                per_page,
+                sort,
+                direction,
             });
 
+            // Save to database for caching
+            await Promise.all(
+                data.map(async (issue) => {
+                    await IssueModel.findOneAndUpdate(
+                        { githubId: issue.id },
+                        {
+                            githubId: issue.id,
+                            title: issue.title,
+                            body: issue.body,
+                            state: issue.state,
+                            labels: issue.labels.map((label) => label.name),
+                            createdAt: new Date(issue.created_at),
+                            updatedAt: new Date(issue.updated_at),
+                            assignee: issue.assignee?.login,
+                            repository: issue.repository.name,
+                        },
+                        { upsert: true, new: true }
+                    );
+                })
+            );
+
             debug.info(`Retrieved ${data.length} issues from ${config.owner}/${config.repo}`);
-            return data;
+            return {
+                success: true,
+                data,
+                total: data.length,
+                pagination: {
+                    page,
+                    per_page,
+                    hasMore: data.length === per_page,
+                },
+            };
         } catch (error) {
             debug.error('Error fetching issues:', error);
-            throw error;
+            return {
+                success: false,
+                error: error.message,
+            };
         }
     },
 
-    async getIssueById(issueNumber: number) {
+    async getIssueById(issueNumber: number): Promise<GithubApiResponse<GithubIssue>> {
         try {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
@@ -36,14 +93,20 @@ export const githubService = {
             });
 
             debug.info(`Retrieved issue #${issueNumber}`);
-            return data;
+            return {
+                success: true,
+                data,
+            };
         } catch (error) {
             debug.error(`Error fetching issue #${issueNumber}:`, error);
-            throw error;
+            return {
+                success: false,
+                error: error.message,
+            };
         }
     },
 
-    async createIssue(title: string, body: string, labels?: string[]) {
+    async createIssue(title: string, body: string, labels?: string[]): Promise<GithubApiResponse<GithubIssue>> {
         try {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
@@ -57,10 +120,16 @@ export const githubService = {
             });
 
             debug.info(`Created new issue: ${title}`);
-            return data;
+            return {
+                success: true,
+                data,
+            };
         } catch (error) {
             debug.error('Error creating issue:', error);
-            throw error;
+            return {
+                success: false,
+                error: error.message,
+            };
         }
     },
 };
