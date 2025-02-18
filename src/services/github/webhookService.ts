@@ -1,9 +1,38 @@
 import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { GithubApiResponse } from '@types/githubTypes';
+import { WEBHOOK_EVENTS, WebhookConfig, WebhookOptions } from '@types/webhookTypes';
 
-export const webhookService = {
-    async configureWebhook(repoName: string): Promise<GithubApiResponse<void>> {
+export class WebhookService {
+    private static instance: WebhookService;
+
+    private constructor() {}
+
+    public static getInstance(): WebhookService {
+        if (!WebhookService.instance) {
+            WebhookService.instance = new WebhookService();
+        }
+        return WebhookService.instance;
+    }
+
+    private getWebhookConfig(apiUrl: string): WebhookConfig {
+        return {
+            url: new URL('/api/webhooks/github', apiUrl).toString(),
+            content_type: 'json',
+            secret: process.env.GITHUB_WEBHOOK_SECRET || '',
+            insecure_ssl: '0',
+        };
+    }
+
+    private getWebhookOptions(config: WebhookConfig): WebhookOptions {
+        return {
+            config,
+            events: [...WEBHOOK_EVENTS],
+            active: true,
+        };
+    }
+
+    public async configureWebhook(repoName: string): Promise<GithubApiResponse<void>> {
         try {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
@@ -29,20 +58,15 @@ export const webhookService = {
                 throw error;
             }
 
-            const webhookUrl = new URL('/api/webhooks/github', apiUrl).toString();
-            const webhookConfig = {
-                url: webhookUrl,
-                content_type: 'json',
-                secret: process.env.GITHUB_WEBHOOK_SECRET,
-                insecure_ssl: '0',
-            };
+            const webhookConfig = this.getWebhookConfig(apiUrl);
+            const webhookOptions = this.getWebhookOptions(webhookConfig);
 
             const { data: webhooks } = await octokit.rest.repos.listWebhooks({
                 owner: config.owner,
                 repo: repoName,
             });
 
-            const existingWebhook = webhooks.find((webhook) => webhook.config.url === webhookUrl);
+            const existingWebhook = webhooks.find((webhook) => webhook.config.url === webhookConfig.url);
 
             if (existingWebhook) {
                 debug.info(`Webhook already exists for ${repoName}, updating configuration...`);
@@ -50,18 +74,14 @@ export const webhookService = {
                     owner: config.owner,
                     repo: repoName,
                     hook_id: existingWebhook.id,
-                    config: webhookConfig,
-                    events: ['push', 'pull_request', 'issues', 'release', 'create', 'delete'],
-                    active: true,
+                    ...webhookOptions,
                 });
             } else {
                 debug.info(`Creating new webhook for ${repoName}`);
                 await octokit.rest.repos.createWebhook({
                     owner: config.owner,
                     repo: repoName,
-                    config: webhookConfig,
-                    events: ['push', 'pull_request', 'issues', 'release', 'create', 'delete'],
-                    active: true,
+                    ...webhookOptions,
                 });
             }
 
@@ -74,5 +94,7 @@ export const webhookService = {
                 error: error.message || 'Unknown error occurred while configuring webhook',
             };
         }
-    },
-};
+    }
+}
+
+export const webhookService = WebhookService.getInstance();
