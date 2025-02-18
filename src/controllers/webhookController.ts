@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
-import { handleGithubWebhook } from '@webhooks/handler';
+import { handleGithubWebhook, handleRepositoryWebhook } from '@webhooks/handler';
 import { debug } from '@utils/logger';
+import { RepositoryModel } from '@models/repository';
+import { webhookService } from '@services/github/webhookService';
 
 export const webhookController = {
     async handleWebhook(req: Request, res: Response) {
@@ -67,6 +69,28 @@ export const webhookController = {
             res.status(500).json({
                 success: false,
                 error: 'Failed to process test webhook',
+            });
+        }
+    },
+
+    async configureRepositoryWebhook(req: Request, res: Response) {
+        try {
+            const { repoName } = req.params;
+
+            if (!repoName) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Repository name is required',
+                });
+            }
+
+            const result = await handleRepositoryWebhook(repoName);
+            res.json(result);
+        } catch (error) {
+            debug.error('Repository webhook configuration error:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Failed to configure repository webhook',
             });
         }
     },
