@@ -93,6 +93,15 @@ const repositorySchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    webhookSettings: {
+        events: [
+            {
+                type: String,
+                enum: ['push', 'pull_request', 'issues', 'release', 'create', 'delete'],
+            },
+        ],
+        channelId: String,
+    },
 });
 
 repositorySchema.index({ 'owner.login': 1 });
