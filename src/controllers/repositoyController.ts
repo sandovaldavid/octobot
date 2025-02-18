@@ -143,4 +143,135 @@ export const repositoryController = {
             });
         }
     },
+
+    async getRepositoryById(req: Request, res: Response) {
+        try {
+            const { repoId } = req.params;
+            const repository = await RepositoryModel.findOne({ githubId: repoId });
+
+            if (!repository) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Repository not found',
+                });
+            }
+
+            res.json({
+                success: true,
+                data: repository,
+            });
+        } catch (error) {
+            debug.error('Error in getRepositoryById controller:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    },
+
+    async getRepositoryByName(req: Request, res: Response) {
+        try {
+            const { repoName } = req.params;
+            const repository = await RepositoryModel.findOne({ name: repoName });
+
+            if (!repository) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Repository not found',
+                });
+            }
+
+            res.json({
+                success: true,
+                data: repository,
+            });
+        } catch (error) {
+            debug.error('Error in getRepositoryByName controller:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    },
+
+    async getRepositoryStats(req: Request, res: Response) {
+        try {
+            const { repoName } = req.params;
+            const result = await repositoryService.getRepositoryStats(repoName);
+
+            if (!result.success) {
+                return res.status(400).json(result);
+            }
+
+            res.json(result);
+        } catch (error) {
+            debug.error('Error in getRepositoryStats controller:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    },
+
+    async toggleRepositoryVisibility(req: Request, res: Response) {
+        try {
+            const { repoName } = req.params;
+            const repository = await RepositoryModel.findOne({ name: repoName });
+
+            if (!repository) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Repository not found',
+                });
+            }
+
+            const result = await repositoryService.updateRepository(repoName, {
+                private: !repository.isPrivate,
+            });
+
+            if (result.success) {
+                res.json(result);
+            } else {
+                res.status(400).json(result);
+            }
+        } catch (error) {
+            debug.error('Error in toggleRepositoryVisibility controller:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    },
+
+    async searchRepositories(req: Request, res: Response) {
+        try {
+            const { query, language, sort = 'updated' } = req.query;
+            const repositories = await RepositoryModel.find({
+                $or: [{ name: { $regex: query, $options: 'i' } }, { description: { $regex: query, $options: 'i' } }],
+                ...(language && { language }),
+            }).sort({ [sort]: -1 });
+
+            res.json({
+                success: true,
+                total: repositories.length,
+                data: repositories,
+            });
+        } catch (error) {
+            debug.error('Error in searchRepositories controller:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    },
+
+    async updateRepositoryTopics(req: Request, res: Response) {
+        try {
+            const { repoName } = req.params;
+            const { topics } = req.body;
+
+            if (!Array.isArray(topics)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Topics must be an array of strings',
+                });
+            }
+
+            const result = await repositoryService.updateRepository(repoName, { topics });
+
+            if (result.success) {
+                res.json(result);
+            } else {
+                res.status(400).json(result);
+            }
+        } catch (error) {
+            debug.error('Error in updateRepositoryTopics controller:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    },
 };
