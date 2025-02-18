@@ -1,7 +1,7 @@
 {
     "name": "octobot",
     "version": "1.0.0",
-    "main": "src/app.js",
+    "main": "src/index.ts",
     "engines": {
         "node": ">=22.13.1",
         "bun": ">=1.2.0"
