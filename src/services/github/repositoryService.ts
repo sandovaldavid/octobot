@@ -17,6 +17,14 @@ interface RepositoryResponse<T> extends GithubApiResponse<T> {
     total?: number;
 }
 
+interface UpdateRepositoryOptions {
+    name?: string;
+    description?: string;
+    private?: boolean;
+    topics?: string[];
+    default_branch?: string;
+}
+
 export const repositoryService = {
     async testConnection(): Promise<GithubApiResponse<GithubRepository>> {
         try {
@@ -191,6 +199,86 @@ export const repositoryService = {
             };
         } catch (error) {
             debug.error('Error creating repository:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    async updateRepository(
+        repoName: string,
+        options: UpdateRepositoryOptions
+    ): Promise<GithubApiResponse<GithubRepository>> {
+        try {
+            const octokit = githubClient.getOctokit();
+            const config = githubClient.getConfig();
+
+            const { data } = await octokit.rest.repos.update({
+                owner: config.owner,
+                repo: repoName,
+                name: options.name || repoName,
+                description: options.description,
+                private: options.private,
+                default_branch: options.default_branch,
+            });
+
+            if (options.topics) {
+                await octokit.rest.repos.replaceAllTopics({
+                    owner: config.owner,
+                    repo: options.name || repoName,
+                    names: options.topics,
+                });
+                debug.info(`Updated topics for repository: ${options.topics.join(', ')}`);
+            }
+
+            const { data: updatedRepo } = await octokit.rest.repos.get({
+                owner: config.owner,
+                repo: options.name || repoName,
+            });
+
+            const repositoryData = {
+                name: updatedRepo.name,
+                fullName: updatedRepo.full_name,
+                description: updatedRepo.description || '',
+                url: updatedRepo.html_url,
+                isPrivate: updatedRepo.private,
+                topics: updatedRepo.topics,
+                defaultBranch: updatedRepo.default_branch,
+                updatedAt: new Date(),
+            };
+
+            const savedRepo = await RepositoryModel.findOneAndUpdate({ githubId: updatedRepo.id }, repositoryData, {
+                new: true,
+            });
+
+            debug.info(`Updated repository: ${updatedRepo.full_name}`);
+            return {
+                success: true,
+                data: this.mapRepositoryData(updatedRepo),
+            };
+        } catch (error) {
+            debug.error('Error updating repository:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    async deleteRepository(repoName: string): Promise<GithubApiResponse<void>> {
+        try {
+            const octokit = githubClient.getOctokit();
+            const config = githubClient.getConfig();
+
+            await octokit.rest.repos.delete({
+                owner: config.owner,
+                repo: repoName,
+            });
+
+            await RepositoryModel.deleteOne({ name: repoName });
+
+            debug.info(`Deleted repository: ${repoName}`);
+            return {
+                success: true,
+                data: `Repository ${repoName} deleted successfully`,
+            };
+        } catch (error) {
+            debug.error('Error deleting repository:', error);
             return { success: false, error: error.message };
         }
     },
