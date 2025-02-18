@@ -53,7 +53,16 @@ export type CommandResponse = {
 };
 
 export interface GithubNotificationOptions {
-    type: 'issue' | 'pull_request' | 'commit' | 'release';
+    type:
+        | 'commit'
+        | 'pull_request'
+        | 'issue'
+        | 'release'
+        | 'create'
+        | 'delete'
+        | 'workflow'
+        | 'deployment'
+        | 'deployment_status';
     action: string;
     title: string;
     description: string;
