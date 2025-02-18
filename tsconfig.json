@@ -35,6 +35,15 @@
             ],
             "@webhooks/*": [
                 "webhooks/*"
+            ],
+            "@routes/*": [
+                "routes/*"
+            ],
+            "@controllers/*": [
+                "controllers/*"
+            ],
+            "@models/*": [
+                "models/*"
             ]
         },
         "resolveJsonModule": true,
