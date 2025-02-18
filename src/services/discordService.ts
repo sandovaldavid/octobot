@@ -22,13 +22,23 @@ export class DiscordService {
         notification: DiscordNotification
     ): Promise<void> {
         try {
+            debug.info(`Attempting to send notification to channel ${channelId}`);
+
+            if (!this.client.isReady()) {
+                debug.error('Discord client not ready');
+                throw new Error('Discord client not ready');
+            }
+
             const channel = (await this.client.channels.fetch(channelId)) as TextChannel;
+
             if (!channel?.isTextBased()) {
+                debug.error(`Channel ${channelId} not found or is not a text channel`);
                 throw new Error(`Channel ${channelId} not found or is not a text channel`);
             }
 
+            debug.info('Sending notification with data:', notification);
             await channel.send({ embeds: [notification] });
-            debug.info(`Notification sent to channel ${channel.name}`);
+            debug.info(`Notification sent successfully to channel ${channel.name}`);
         } catch (error) {
             debug.error('Error sending Discord notification:', error);
             throw error;
