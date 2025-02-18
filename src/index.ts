@@ -1,10 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import logger from '@utils/logger.ts';
-import { debug, httpLogger } from '@utils/logger.ts';
+import { connectDB } from '@config/database.ts';
+import { debug, httpLogger, logger } from '@utils/logger.ts';
 
 dotenv.config();
+
+connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
