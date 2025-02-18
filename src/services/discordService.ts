@@ -47,42 +47,72 @@ export class DiscordService {
 
     public createGithubNotification(options: GithubNotificationOptions): DiscordNotification {
         let color: number;
+        let eventType = options.type;
+        let actionText = options.action;
 
+        // Determinar color basado en tipo y acción
         switch (options.type) {
             case 'commit':
-                color = DiscordColors.SUCCESS; // Verde para commits
+                color = DiscordColors.SUCCESS;
                 break;
             case 'create':
-                color =
-                    options.action === 'branch'
-                        ? DiscordColors.BRANCH // Amarillo para nuevas ramas
-                        : DiscordColors.DEFAULT; // Color por defecto para otros eventos create
+                if (options.action === 'branch') {
+                    color = DiscordColors.BRANCH;
+                    actionText = 'Branch created';
+                } else {
+                    color = DiscordColors.DEFAULT;
+                }
+                break;
+            case 'delete':
+                if (options.action === 'branch') {
+                    color = DiscordColors.ERROR;
+                    actionText = 'Branch deleted';
+                } else {
+                    color = DiscordColors.WARNING;
+                }
                 break;
             case 'pull_request':
                 color =
                     options.action === 'merged'
-                        ? DiscordColors.PR_MERGED // Morado para PRs mergeados
-                        : DiscordColors.PR_OPEN; // Verde claro para PRs abiertos
+                        ? DiscordColors.PR_MERGED
+                        : options.action === 'closed'
+                          ? DiscordColors.ERROR
+                          : DiscordColors.PR_OPEN;
                 break;
             case 'issue':
-                color =
-                    options.action === 'closed'
-                        ? DiscordColors.ISSUE_CLOSED // Rojo para issues cerrados
-                        : DiscordColors.ISSUE_OPEN; // Azul para issues abiertos
+                color = options.action === 'closed' ? DiscordColors.ISSUE_CLOSED : DiscordColors.ISSUE_OPEN;
                 break;
             case 'release':
-                color = DiscordColors.INFO; // Azul claro para releases
+                color = DiscordColors.INFO;
+                break;
+            case 'workflow':
+                color =
+                    options.action === 'success'
+                        ? DiscordColors.SUCCESS
+                        : options.action === 'failure'
+                          ? DiscordColors.ERROR
+                          : DiscordColors.WARNING;
+                break;
+            case 'deployment':
+            case 'deployment_status':
+                color =
+                    options.action === 'success'
+                        ? DiscordColors.SUCCESS
+                        : options.action === 'failure'
+                          ? DiscordColors.ERROR
+                          : DiscordColors.INFO;
                 break;
             default:
-                color = DiscordColors.DEFAULT; // Color por defecto
+                color = DiscordColors.DEFAULT;
         }
 
-        return {
+        // Crear notificación
+        const notification: DiscordNotification = {
             type: 'info',
             title: options.title,
             description: options.description,
             color: options.color || color,
-            fields: options.fields,
+            fields: options.fields || [],
             timestamp: new Date(),
             author: {
                 name: options.author.name,
@@ -90,9 +120,19 @@ export class DiscordService {
             },
             url: options.url,
             footer: {
-                text: `GitHub ${options.type} - ${options.action}`,
+                text: `GitHub ${eventType} - ${actionText}`,
             },
         };
+
+        // Log para debugging
+        debug.info('Created notification:', {
+            type: eventType,
+            action: actionText,
+            color: color.toString(16),
+            title: options.title,
+        });
+
+        return notification;
     }
 }
 
