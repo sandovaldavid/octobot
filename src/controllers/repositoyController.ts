@@ -110,20 +110,37 @@ export const repositoryController = {
     async deleteRepository(req: Request, res: Response) {
         try {
             const { repoName } = req.params;
-            const result = await repositoryService.deleteRepository(repoName);
-            logger.info('Repository deleted:', result);
 
-            if (result.success) {
-                res.status(200).json({
-                    success: true,
-                    message: result.data,
+            const githubResult = await repositoryService.deleteRepository(repoName);
+
+            if (!githubResult.success) {
+                return res.status(400).json({
+                    success: false,
+                    error: githubResult.error,
                 });
-            } else {
-                res.status(400).json(result);
             }
+
+            try {
+                await RepositoryModel.deleteOne({ name: repoName });
+                debug.info(`Database: Deleted repository ${repoName}`);
+            } catch (dbError) {
+                debug.error('Database Error:', dbError);
+                return res.status(500).json({
+                    success: false,
+                    error: 'Repository deleted from GitHub but database update failed',
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: `Repository ${repoName} successfully deleted`,
+            });
         } catch (error) {
-            debug.error('Error in deleteRepository controller:', error);
-            res.status(500).json({ error: 'Internal Server Error' });
+            debug.error('Controller Error:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Internal Server Error',
+            });
         }
     },
 };
