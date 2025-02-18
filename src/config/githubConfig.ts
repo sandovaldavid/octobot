@@ -42,7 +42,7 @@ class GitHubClient {
         try {
             const webhookResult = await webhookService.configureWebhook(this.config.repo);
             if (!webhookResult.success) {
-                throw new Error(`Failed to configure webhook: ${webhookResult.error}`);
+                debug.warn(`Failed to configure webhook: ${webhookResult.error}`);
             }
 
             const { data: webhooks } = await this.octokit.rest.repos.listWebhooks({
@@ -50,11 +50,28 @@ class GitHubClient {
                 repo: this.config.repo,
             });
 
-            const webhookUrl = `${process.env.API_URL}/webhooks/github`;
-            const webhookExists = webhooks.some((webhook) => webhook.config.url === webhookUrl && webhook.active);
+            const webhookUrl = new URL('/api/webhooks/github', process.env.API_URL).toString();
+            const webhookExists = webhooks.some((webhook) => {
+                const isMatchingUrl = webhook.config.url === webhookUrl;
+                const isActive = webhook.active;
+                const hasCorrectEvents = webhook.events.includes('push');
+
+                debug.info('Webhook validation:', {
+                    url: webhook.config.url,
+                    expectedUrl: webhookUrl,
+                    isActive,
+                    events: webhook.events,
+                });
+
+                return isMatchingUrl && isActive && hasCorrectEvents;
+            });
 
             if (!webhookExists) {
-                throw new Error('Webhook not found or inactive');
+                debug.info('Webhook not found, attempting to create...');
+                const createResult = await webhookService.configureWebhook(this.config.repo);
+                if (!createResult.success) {
+                    throw new Error(`Failed to create webhook: ${createResult.error}`);
+                }
             }
 
             debug.info('GitHub webhook configured and active');
