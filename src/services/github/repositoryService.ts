@@ -278,6 +278,94 @@ export const repositoryService = {
         }
     },
 
+    async getRepositoryStats(repoName: string): Promise<GithubApiResponse<any>> {
+        try {
+            const octokit = githubClient.getOctokit();
+            const config = githubClient.getConfig();
+
+            const [repoData, languages, contributors, weeklyCommits, recentCommits] = await Promise.all([
+                octokit.rest.repos.get({
+                    owner: config.owner,
+                    repo: repoName,
+                }),
+                octokit.rest.repos.listLanguages({
+                    owner: config.owner,
+                    repo: repoName,
+                }),
+                octokit.rest.repos.listContributors({
+                    owner: config.owner,
+                    repo: repoName,
+                    per_page: 100,
+                }),
+                octokit.rest.repos.getParticipationStats({
+                    owner: config.owner,
+                    repo: repoName,
+                }),
+                octokit.rest.repos.listCommits({
+                    owner: config.owner,
+                    repo: repoName,
+                    per_page: 10,
+                }),
+            ]);
+
+            const stats = {
+                general: {
+                    stars: repoData.data.stargazers_count,
+                    watchers: repoData.data.watchers_count,
+                    forks: repoData.data.forks_count,
+                    openIssues: repoData.data.open_issues_count,
+                    size: repoData.data.size,
+                    defaultBranch: repoData.data.default_branch,
+                    createdAt: repoData.data.created_at,
+                    updatedAt: repoData.data.updated_at,
+                    pushedAt: repoData.data.pushed_at,
+                },
+                languages: languages.data,
+                contributors: contributors.data.map((contributor) => ({
+                    login: contributor.login,
+                    contributions: contributor.contributions,
+                    avatar_url: contributor.avatar_url,
+                })),
+                commitActivity: {
+                    weekly: {
+                        all: weeklyCommits.data.all,
+                        owner: weeklyCommits.data.owner,
+                    },
+                    recent: recentCommits.data.map((commit) => ({
+                        sha: commit.sha.substring(0, 7),
+                        message: commit.commit.message,
+                        author: commit.commit.author.name,
+                        date: commit.commit.author.date,
+                        url: commit.html_url,
+                    })),
+                },
+            };
+
+            await RepositoryModel.findOneAndUpdate(
+                { name: repoName },
+                {
+                    $set: {
+                        'stats.lastUpdated': new Date(),
+                        'stats.data': stats,
+                    },
+                },
+                { new: true }
+            );
+
+            debug.info(`Retrieved stats for repository: ${repoName}`);
+            return {
+                success: true,
+                data: stats,
+            };
+        } catch (error) {
+            debug.error('Error getting repository stats:', error);
+            return {
+                success: false,
+                error: error.message,
+            };
+        }
+    },
+
     mapRepositoryData(repo: any): GithubRepository {
         return {
             id: repo.id,
