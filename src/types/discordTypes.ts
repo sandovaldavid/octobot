@@ -53,7 +53,16 @@ export type CommandResponse = {
 };
 
 export interface GithubNotificationOptions {
-    type: 'issue' | 'pull_request' | 'commit' | 'release';
+    type:
+        | 'commit'
+        | 'pull_request'
+        | 'issue'
+        | 'release'
+        | 'create'
+        | 'delete'
+        | 'workflow'
+        | 'deployment'
+        | 'deployment_status';
     action: string;
     title: string;
     description: string;
@@ -72,11 +81,16 @@ export interface GithubNotificationOptions {
 
 // Color constants for embeds
 export const DiscordColors = {
-    SUCCESS: 0x00ff00, // Green
-    ERROR: 0xff0000, // Red
-    WARNING: 0xffff00, // Yellow
-    INFO: 0x0000ff, // Blue
+    SUCCESS: 0x00ff00, // Verde
+    ERROR: 0xff0000, // Rojo
+    WARNING: 0xffa500, // Naranja
+    INFO: 0x0099ff, // Azul claro
     DEFAULT: 0x7289da, // Discord Blurple
+    BRANCH: 0xffff00, // Amarillo para ramas
+    PR_OPEN: 0x2ecc71, // Verde claro para PRs abiertos
+    PR_MERGED: 0x9b59b6, // Morado para PRs mergeados
+    ISSUE_OPEN: 0x3498db, // Azul para issues abiertos
+    ISSUE_CLOSED: 0xe74c3c, // Rojo para issues cerrados
 } as const;
 
 // Common permission flags
