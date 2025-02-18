@@ -3,6 +3,7 @@ import { repositoryService } from '@services/github/repositoryService';
 import { RepositoryModel } from '@models/repository';
 import { debug } from '@utils/logger';
 import { GithubRepository, GithubApiResponse } from '@types/githubTypes';
+import { logger } from '../utils/logger';
 
 export const repositoryController = {
     async getAllRepositories(req: Request, res: Response) {
@@ -110,7 +111,16 @@ export const repositoryController = {
         try {
             const { repoName } = req.params;
             const result = await repositoryService.deleteRepository(repoName);
-            return res.json(result);
+            logger.info('Repository deleted:', result);
+
+            if (result.success) {
+                res.status(200).json({
+                    success: true,
+                    message: result.data,
+                });
+            } else {
+                res.status(400).json(result);
+            }
         } catch (error) {
             debug.error('Error in deleteRepository controller:', error);
             res.status(500).json({ error: 'Internal Server Error' });
