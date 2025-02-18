@@ -13,6 +13,12 @@ const handlers = {
     release: handleReleaseEvent,
     create: handleCreateEvent,
     delete: handleDeleteEvent,
+    // workflow_run: handleWorkflowRunEvent,
+    // workflow_job: handleWorkflowJobEvent,
+    // check_run: handleCheckRunEvent,
+    // deployment: handleDeploymentEvent,
+    // deployment_status: handleDeploymentStatusEvent,
+    // status: handleStatusEvent,
 };
 
 export const handleGithubWebhook = async (event: string, payload: any) => {
@@ -174,8 +180,8 @@ async function handleCreateEvent(channelId: string, payload: any) {
     if (payload.ref_type !== 'branch') return;
 
     const notification = discordService.createGithubNotification({
-        type: 'commit',
-        action: 'created',
+        type: 'create',
+        action: 'branch',
         title: `New Branch Created`,
         description: `Branch ${payload.ref} was created in ${payload.repository.full_name}`,
         url: `${payload.repository.html_url}/tree/${payload.ref}`,
@@ -183,7 +189,7 @@ async function handleCreateEvent(channelId: string, payload: any) {
             name: payload.sender.login,
             avatar: payload.sender.avatar_url,
         },
-        color: DiscordColors.SUCCESS,
+        color: DiscordColors.BRANCH,
     });
 
     await discordService.sendNotification(channelId, notification);
@@ -193,8 +199,8 @@ async function handleDeleteEvent(channelId: string, payload: any) {
     if (payload.ref_type !== 'branch') return;
 
     const notification = discordService.createGithubNotification({
-        type: 'commit',
-        action: 'deleted',
+        type: 'delete',
+        action: 'branch',
         title: `Branch Deleted`,
         description: `Branch ${payload.ref} was deleted from ${payload.repository.full_name}`,
         url: payload.repository.html_url,
