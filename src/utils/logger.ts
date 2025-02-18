@@ -13,7 +13,7 @@ const logFormat = printf(({ level, message, timestamp, ...metadata }) => {
 });
 
 // Logger configuration
-const logger = winston.createLogger({
+export const logger = winston.createLogger({
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     format: combine(timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), colorize(), logFormat),
     transports: [
@@ -67,5 +67,3 @@ export const debug = {
     debug: (message: string, meta?: any) => logger.debug(message, meta),
     http: (message: string, meta?: any) => logger.http(message, meta),
 };
-
-export default logger;
