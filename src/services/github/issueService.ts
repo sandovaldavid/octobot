@@ -46,14 +46,54 @@ export const issueService = {
                         { githubId: issue.id },
                         {
                             githubId: issue.id,
+                            number: issue.number,
                             title: issue.title,
                             body: issue.body,
                             state: issue.state,
-                            labels: issue.labels.map((label) => label.name),
-                            createdAt: new Date(issue.created_at),
-                            updatedAt: new Date(issue.updated_at),
-                            assignee: issue.assignee?.login,
-                            repository: issue.repository?.full_name || 'unknown',
+                            labels: issue.labels.map((label) => ({
+                                id: label.id,
+                                name: label.name,
+                                description: label.description,
+                                color: label.color,
+                            })),
+                            user: {
+                                login: issue.user.login,
+                                id: issue.user.id,
+                                type: issue.user.type,
+                                avatar_url: issue.user.avatar_url,
+                            },
+                            assignee: issue.assignee
+                                ? {
+                                      login: issue.assignee.login,
+                                      id: issue.assignee.id,
+                                      type: issue.assignee.type,
+                                      avatar_url: issue.assignee.avatar_url,
+                                  }
+                                : null,
+                            repository: {
+                                id: issue.repository.id,
+                                name: issue.repository.name,
+                                full_name: issue.repository.full_name,
+                                private: issue.repository.private,
+                            },
+                            comments: issue.comments,
+                            created_at: new Date(issue.created_at),
+                            updated_at: new Date(issue.updated_at),
+                            closed_at: issue.closed_at ? new Date(issue.closed_at) : null,
+                            url: issue.url,
+                            html_url: issue.html_url,
+                            comments_url: issue.comments_url,
+                            locked: issue.locked,
+                            milestone: issue.milestone
+                                ? {
+                                      id: issue.milestone.id,
+                                      number: issue.milestone.number,
+                                      title: issue.milestone.title,
+                                      description: issue.milestone.description,
+                                      state: issue.milestone.state,
+                                      due_on: new Date(issue.milestone.due_on),
+                                  }
+                                : null,
                         },
                         { upsert: true, new: true }
                     );
