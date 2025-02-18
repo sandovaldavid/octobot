@@ -1,6 +1,7 @@
 import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { GithubIssue, GithubApiResponse } from '@types/githubTypes';
+import { IssueModel } from '@models/issue';
 
 export const issueService = {
     async getIssues(
@@ -28,9 +29,8 @@ export const issueService = {
                 direction = 'desc',
             } = options;
 
-            const { data } = await octokit.rest.issues.listForRepo({
-                owner: config.owner,
-                repo: config.repo,
+            const { data } = await octokit.rest.issues.listForAuthenticatedUser({
+                filter: 'all', // can be 'assigned', 'created', 'mentioned', 'subscribed'
                 state,
                 labels: labels?.join(','),
                 since,
@@ -40,7 +40,6 @@ export const issueService = {
                 direction,
             });
 
-            // Save to database for caching
             await Promise.all(
                 data.map(async (issue) => {
                     await IssueModel.findOneAndUpdate(
@@ -54,14 +53,14 @@ export const issueService = {
                             createdAt: new Date(issue.created_at),
                             updatedAt: new Date(issue.updated_at),
                             assignee: issue.assignee?.login,
-                            repository: issue.repository.name,
+                            repository: issue.repository?.full_name || 'unknown',
                         },
                         { upsert: true, new: true }
                     );
                 })
             );
 
-            debug.info(`Retrieved ${data.length} issues from ${config.owner}/${config.repo}`);
+            debug.info(`Retrieved ${data.length} issues for user ${config.owner}`);
             return {
                 success: true,
                 data,
