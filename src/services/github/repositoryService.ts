@@ -270,15 +270,10 @@ export const repositoryService = {
                 repo: repoName,
             });
 
-            await RepositoryModel.deleteOne({ name: repoName });
-
-            debug.info(`Deleted repository: ${repoName}`);
-            return {
-                success: true,
-                data: `Repository ${repoName} deleted successfully`,
-            };
+            debug.info(`GitHub API: Deleted repository ${repoName}`);
+            return { success: true };
         } catch (error) {
-            debug.error('Error deleting repository:', error);
+            debug.error('GitHub API Error:', error);
             return { success: false, error: error.message };
         }
     },
