@@ -13,7 +13,7 @@ export const webhookService = {
                 throw new Error('API_URL is not defined in environment variables');
             }
 
-            const webhookUrl = new URL('/webhooks/github', apiUrl).toString();
+            const webhookUrl = new URL('api/webhooks/github', apiUrl).toString();
             const webhookConfig = {
                 url: webhookUrl,
                 content_type: 'json',
