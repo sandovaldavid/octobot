@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Compiled output
+dist/
+build/
+*.js
+*.js.map
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Testing
+coverage/
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Bun
+bun.lockb
+
+# Project specific
+tmp/
+.cache/
