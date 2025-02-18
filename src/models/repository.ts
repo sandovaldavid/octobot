@@ -63,9 +63,21 @@ const repositorySchema = new mongoose.Schema({
         },
     ],
     owner: {
-        login: String,
-        id: Number,
-        type: String,
+        login: {
+            type: String,
+            required: true,
+        },
+        id: {
+            type: Number,
+            required: true,
+        },
+        type: {
+            type: String,
+            required: true,
+        },
+        avatar_url: {
+            type: String,
+        },
     },
     webhookActive: {
         type: Boolean,
