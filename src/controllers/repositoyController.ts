@@ -81,4 +81,39 @@ export const repositoryController = {
             res.status(500).json({ error: 'Internal Server Error' });
         }
     },
+
+    async updateRepository(req: Request, res: Response) {
+        try {
+            const { repoName } = req.params;
+            const { name, description, private: isPrivate, topics, default_branch } = req.body;
+
+            const result = await repositoryService.updateRepository(repoName, {
+                name,
+                description,
+                private: isPrivate,
+                topics,
+                default_branch,
+            });
+
+            if (result.success) {
+                res.json(result);
+            } else {
+                res.status(400).json(result);
+            }
+        } catch (error) {
+            debug.error('Error in updateRepository controller:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    },
+
+    async deleteRepository(req: Request, res: Response) {
+        try {
+            const { repoName } = req.params;
+            const result = await repositoryService.deleteRepository(repoName);
+            return res.json(result);
+        } catch (error) {
+            debug.error('Error in deleteRepository controller:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    },
 };
