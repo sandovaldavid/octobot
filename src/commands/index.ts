@@ -1,4 +1,4 @@
-import { Collection } from 'discord.js';
+import { Collection, CommandInteraction, ChatInputCommandInteraction } from 'discord.js';
 import { watch } from '@commands/watch/watch';
 import { DiscordCommand } from '@types/discordTypes';
 import { debug } from '@utils/logger';
@@ -20,8 +20,7 @@ class CommandRegistry {
     }
 
     private registerCommands() {
-        // Register all commands here
-        this.commands.set('github', watch);
+        this.commands.set(watch.data.name, watch);
         debug.info('Commands registered:', Array.from(this.commands.keys()));
     }
 
@@ -29,29 +28,42 @@ class CommandRegistry {
         return this.commands;
     }
 
-    public getCommand(name: string): DiscordCommand | undefined {
-        return this.commands.get(name);
-    }
-
-    public async handleCommand(interaction: any) {
-        if (!interaction.isCommand()) return;
-
-        const command = this.commands.get(interaction.commandName);
-        if (!command) return;
+    public async handleCommand(interaction: ChatInputCommandInteraction) {
+        if (!interaction.isChatInputCommand()) return;
 
         try {
+            const command = this.commands.get(interaction.commandName);
+            if (!command) {
+                debug.warn(`Command not found: ${interaction.commandName}`);
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply({
+                        content: 'Command not found',
+                        ephemeral: true,
+                    });
+                }
+                return;
+            }
+
+            debug.info(`Executing command: ${interaction.commandName}`);
             await command.execute(interaction);
         } catch (error) {
             debug.error(`Error executing command ${interaction.commandName}:`, error);
-            const response = {
-                content: 'There was an error executing this command!',
-                ephemeral: true,
-            };
 
-            if (interaction.replied || interaction.deferred) {
-                await interaction.followUp(response);
-            } else {
-                await interaction.reply(response);
+            try {
+                const errorMessage = {
+                    content: 'There was an error executing this command!',
+                    ephemeral: true,
+                };
+
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply(errorMessage);
+                } else if (interaction.deferred) {
+                    await interaction.editReply(errorMessage);
+                } else if (interaction.replied) {
+                    await interaction.followUp(errorMessage);
+                }
+            } catch (replyError) {
+                debug.error('Error sending error response:', replyError);
             }
         }
     }
