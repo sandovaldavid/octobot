@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { REST, Routes } from 'discord.js';
 import { connectDB } from '@config/databaseConfig';
 import { discordClient } from '@config/discordConfig';
 import { debug, logger } from '@utils/logger';
@@ -9,8 +10,16 @@ import repositoryRoutes from '@routes/repositoryRoutes';
 import issueRoutes from '@routes/issueRoutes';
 import webhookRoutes from '@routes/webhookRoutes';
 import { repositoryService } from '@services/github/repositoryService';
+import { watch } from '@commands/watch/watch';
 
 dotenv.config();
+
+const client = discordClient.getClient();
+
+// Handle commands through registry
+client.on('interactionCreate', async (interaction) => {
+    await commandRegistry.handleCommand(interaction);
+});
 
 const initializeServices = async () => {
     try {
