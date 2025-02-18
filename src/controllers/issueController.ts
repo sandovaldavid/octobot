@@ -1,13 +1,24 @@
 import { Request, Response } from 'express';
-import { issueService } from '@services/github/issue.service';
-import { IssueModel } from '@models/issue.model';
+import { issueService } from '@services/github/issueService';
+import { IssueModel } from '@models/issue';
 import { debug } from '@utils/logger';
+import { logger } from '../utils/logger';
 
 export const issueController = {
     async getIssues(req: Request, res: Response) {
         try {
-            const { state = 'open' } = req.query;
-            const issues = await issueService.getIssues(state as 'open' | 'closed' | 'all');
+            const { state = 'open', labels, since, page, per_page, sort, direction } = req.query;
+
+            const issues = await issueService.getIssues({
+                state: state as 'open' | 'closed' | 'all',
+                labels: Array.isArray(labels) ? labels : labels?.split(','),
+                since: since as string,
+                page: page ? Number(page) : undefined,
+                per_page: per_page ? Number(per_page) : undefined,
+                sort: sort as 'created' | 'updated' | 'comments',
+                direction: direction as 'asc' | 'desc',
+            });
+
             res.json(issues);
         } catch (error) {
             debug.error('Error in getIssues controller:', error);
