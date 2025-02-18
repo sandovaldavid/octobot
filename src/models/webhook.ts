@@ -1,10 +1,11 @@
 import mongoose from 'mongoose';
+import { WEBHOOK_EVENTS, WebhookEventType } from '@types/webhookTypes';
 
 const webhookSchema = new mongoose.Schema({
     type: {
         type: String,
         required: true,
-        enum: ['issue', 'pull_request', 'push', 'release', 'watch','fork'],
+        enum: WEBHOOK_EVENTS,
     },
     repositoryName: {
         type: String,
@@ -19,5 +20,8 @@ const webhookSchema = new mongoose.Schema({
         default: Date.now,
     },
 });
+
+webhookSchema.index({ type: 1, repositoryName: 1 });
+webhookSchema.index({ createdAt: -1 });
 
 export const WebhookModel = mongoose.model('Webhook', webhookSchema);
