@@ -1,5 +1,6 @@
 import { Collection, CommandInteraction, ChatInputCommandInteraction } from 'discord.js';
 import { watch } from '@commands/watch/watch';
+import { sync } from '@commands/sync/sync'; 
 import { DiscordCommand } from '@types/discordTypes';
 import { debug } from '@utils/logger';
 
@@ -21,6 +22,7 @@ class CommandRegistry {
 
     private registerCommands() {
         this.commands.set(watch.data.name, watch);
+        this.commands.set(sync.data.name, sync);
         debug.info('Commands registered:', Array.from(this.commands.keys()));
     }
 
