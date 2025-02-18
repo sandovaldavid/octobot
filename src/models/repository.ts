@@ -62,6 +62,16 @@ const repositorySchema = new mongoose.Schema({
             type: String,
         },
     ],
+    stats: {
+        lastUpdated: {
+            type: Date,
+            default: Date.now,
+        },
+        data: {
+            type: mongoose.Schema.Types.Mixed,
+            default: null,
+        },
+    },
     owner: {
         login: {
             type: String,
