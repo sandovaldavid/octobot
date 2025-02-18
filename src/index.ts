@@ -4,8 +4,11 @@ import dotenv from 'dotenv';
 import { connectDB } from '@config/databaseConfig';
 import { discordClient } from '@config/discordConfig';
 import { debug, logger } from '@utils/logger';
+import { githubClient } from '@config/githubConfig';
 import repositoryRoutes from '@routes/repositoryRoutes';
 import issueRoutes from '@routes/issueRoutes';
+import webhookRoutes from '@routes/webhookRoutes';
+import { repositoryService } from '@services/github/repositoryService';
 
 dotenv.config();
 
@@ -16,6 +19,11 @@ const initializeServices = async () => {
         const discordConnected = await discordClient.testConnection();
         if (!discordConnected) {
             throw new Error('Failed to connect to Discord');
+        }
+
+        const webhookConnected = await githubClient.testWebhookConnection();
+        if (!webhookConnected) {
+            logger.warn('Webhook configuration failed - Some notifications may not work');
         }
 
         const app = express();
@@ -41,14 +49,21 @@ const initializeServices = async () => {
                 status: 'OK',
                 timestamp: new Date().toISOString(),
                 discord: discordClient.getClient().isReady() ? 'Connected' : 'Disconnected',
+                webhook: webhookConnected ? 'Configured' : 'Not Configured',
+                database: 'Connected',
             });
         });
 
         app.use('/api', repositoryRoutes);
         app.use('/api', issueRoutes);
+        app.use('/api', webhookRoutes);
 
         app.listen(PORT, () => {
             logger.info(`Server running on port ${PORT}`);
+            logger.info('Service Status:');
+            logger.info(`- Database: Connected`);
+            logger.info(`- Discord: ${discordClient.getClient().isReady() ? 'Connected' : 'Disconnected'}`);
+            logger.info(`- Webhook: ${webhookConnected ? 'Configured' : 'Not Configured'}`);
         });
     } catch (error) {
         logger.error('Failed to initialize services:', error);
