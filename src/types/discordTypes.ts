@@ -1,11 +1,8 @@
 import { ChatInputCommandInteraction, Message, TextChannel, ClientEvents, GuildMember, Role } from 'discord.js';
 
 export interface DiscordCommand {
-    name: string;
-    description: string;
+    data: SlashCommandBuilder;
     execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
-    cooldown?: number;
-    permissions?: string[];
 }
 
 export interface DiscordEvent {
