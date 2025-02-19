@@ -116,22 +116,93 @@ export const issueService = {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
 
+            // Get issue from database
+            const issueFromDb = await IssueModel.findOne({ number: issueNumber });
+
+            if (issueFromDb) {
+                debug.info(`Retrieved issue #${issueNumber} from database`);
+                return {
+                    success: true,
+                    data: issueFromDb,
+                };
+            }
+
+            // If not in database, try GitHub API
             const { data } = await octokit.rest.issues.get({
                 owner: config.owner,
                 repo: config.repo,
                 issue_number: issueNumber,
             });
 
-            debug.info(`Retrieved issue #${issueNumber}`);
+            // Save to database
+            const issueData = {
+                githubId: data.id,
+                number: data.number,
+                title: data.title,
+                body: data.body,
+                state: data.state,
+                labels: data.labels.map((label) => ({
+                    id: label.id,
+                    name: label.name,
+                    description: label.description,
+                    color: label.color,
+                })),
+                user: data.user && {
+                    login: data.user.login,
+                    id: data.user.id,
+                    type: data.user.type,
+                    avatar_url: data.user.avatar_url,
+                },
+                assignee: data.assignee && {
+                    login: data.assignee.login,
+                    id: data.assignee.id,
+                    type: data.assignee.type,
+                    avatar_url: data.assignee.avatar_url,
+                },
+                repository: {
+                    id: data.repository.id,
+                    name: data.repository.name,
+                    full_name: data.repository.full_name,
+                    private: data.repository.private,
+                },
+                comments: data.comments,
+                created_at: new Date(data.created_at),
+                updated_at: new Date(data.updated_at),
+                closed_at: data.closed_at ? new Date(data.closed_at) : null,
+                url: data.url,
+                html_url: data.html_url,
+                comments_url: data.comments_url,
+                locked: data.locked,
+                milestone: data.milestone && {
+                    id: data.milestone.id,
+                    number: data.milestone.number,
+                    title: data.milestone.title,
+                    description: data.milestone.description,
+                    state: data.milestone.state,
+                    due_on: new Date(data.milestone.due_on),
+                },
+            };
+
+            await IssueModel.findOneAndUpdate({ githubId: data.id }, issueData, { upsert: true, new: true });
+
+            debug.info(`Retrieved and saved issue #${issueNumber} from GitHub`);
             return {
                 success: true,
                 data,
             };
         } catch (error) {
             debug.error(`Error fetching issue #${issueNumber}:`, error);
+
+            if (error.status === 404) {
+                return {
+                    success: false,
+                    error: `Issue #${issueNumber} not found`,
+                };
+            }
+
             return {
                 success: false,
-                error: error.message,
+                error: error.message || 'Failed to fetch issue',
             };
         }
     },
