@@ -375,4 +375,139 @@ export const issueService = {
             };
         }
     },
+
+    async getIssuesByRepository(
+        repoName: string,
+        options: {
+            state?: 'open' | 'closed' | 'all';
+            labels?: string[];
+            since?: string;
+            page?: number;
+            per_page?: number;
+            sort?: 'created' | 'updated' | 'comments';
+            direction?: 'asc' | 'desc';
+        } = {}
+    ): Promise<GithubApiResponse<GithubIssue[]>> {
+        try {
+            const octokit = githubClient.getOctokit();
+            const config = githubClient.getConfig();
+
+            debug.info(`Fetching issues for repository: ${repoName}`);
+
+            // Verify repository exists first
+            try {
+                const { data: repository } = await octokit.rest.repos.get({
+                    owner: config.owner,
+                    repo: repoName,
+                });
+
+                // Get issues from GitHub API
+                const { data } = await octokit.rest.issues.listForRepo({
+                    owner: config.owner,
+                    repo: repoName,
+                    state: options.state || 'all',
+                    labels: options.labels?.join(','),
+                    since: options.since,
+                    page: options.page || 1,
+                    per_page: options.per_page || 100,
+                    sort: options.sort || 'updated',
+                    direction: options.direction || 'desc',
+                });
+
+                // Update database
+                await Promise.all(
+                    data.map(async (issue) => {
+                        const issueData = {
+                            githubId: issue.id,
+                            number: issue.number,
+                            title: issue.title,
+                            body: issue.body,
+                            state: issue.state,
+                            labels: issue.labels.map((label) => ({
+                                id: label.id,
+                                name: label.name,
+                                description: label.description,
+                                color: label.color,
+                            })),
+                            user: issue.user && {
+                                login: issue.user.login,
+                                id: issue.user.id,
+                                type: issue.user.type,
+                                avatar_url: issue.user.avatar_url,
+                            },
+                            assignee: issue.assignee && {
+                                login: issue.assignee.login,
+                                id: issue.assignee.id,
+                                type: issue.assignee.type,
+                                avatar_url: issue.assignee.avatar_url,
+                            },
+                            repository: {
+                                id: repository.id,
+                                name: repository.name,
+                                full_name: repository.full_name,
+                                private: repository.private,
+                            },
+                            comments: issue.comments,
+                            created_at: new Date(issue.created_at),
+                            updated_at: new Date(issue.updated_at),
+                            closed_at: issue.closed_at ? new Date(issue.closed_at) : null,
+                            url: issue.url,
+                            html_url: issue.html_url,
+                            comments_url: issue.comments_url,
+                            locked: issue.locked,
+                            milestone: issue.milestone && {
+                                id: issue.milestone.id,
+                                number: issue.milestone.number,
+                                title: issue.milestone.title,
+                                description: issue.milestone.description,
+                                state: issue.milestone.state,
+                                due_on: new Date(issue.milestone.due_on),
+                            },
+                        };
+
+                        await IssueModel.findOneAndUpdate(
+                            {
+                                githubId: issue.id,
+                                'repository.name': repoName,
+                            },
+                            issueData,
+                            { upsert: true, new: true }
+                        );
+                    })
+                );
+
+                debug.info(`Retrieved ${data.length} issues for repository ${repoName}`);
+
+                return {
+                    success: true,
+                    data,
+                    total: data.length,
+                    pagination: {
+                        page: options.page || 1,
+                        per_page: options.per_page || 100,
+                        hasMore: data.length === (options.per_page || 100),
+                    },
+                };
+            } catch (error: any) {
+                if (error.status === 404) {
+                    return {
+                        success: false,
+                        error: `Repository ${repoName} not found`,
+                    };
+                }
+                throw error;
+            }
+        } catch (error: any) {
+            debug.error('Error fetching repository issues:', {
+                repository: repoName,
+                error: error.message,
+                status: error.status,
+            });
+
+            return {
+                success: false,
+                error: error.message || 'Failed to fetch repository issues',
+            };
+        }
+    },
 };
