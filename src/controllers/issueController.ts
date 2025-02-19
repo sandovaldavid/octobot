@@ -96,4 +96,26 @@ export const issueController = {
             res.status(500).json({ error: 'Internal Server Error' });
         }
     },
+
+    async syncIssues(req: Request, res: Response) {
+        try {
+            debug.info('Starting issues synchronization');
+
+            const syncResult = await issueService.syncIssues();
+
+            if (!syncResult.success) {
+                debug.error('Failed to sync issues:', syncResult.error);
+                return res.status(500).json(syncResult);
+            }
+
+            debug.info(`Sync completed: ${syncResult.data.synced}/${syncResult.data.total} issues synchronized`);
+            return res.json(syncResult);
+        } catch (error) {
+            debug.error('Error in syncIssues controller:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Internal Server Error',
+            });
+        }
+    },
 };
