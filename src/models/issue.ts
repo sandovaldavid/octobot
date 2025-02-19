@@ -16,7 +16,6 @@ const issueSchema = new mongoose.Schema(
         githubId: {
             type: Number,
             required: true,
-            unique: true,
             index: true,
         },
         number: {
@@ -98,7 +97,8 @@ const issueSchema = new mongoose.Schema(
 );
 
 // Indexes
-issueSchema.index({ 'repository.full_name': 1, number: 1 }, { unique: true });
+issueSchema.index({ 'repository.full_name': 1, number: 1 }, { unique: true, name: 'repository_issue_number' });
+issueSchema.index({ githubId: 1, 'repository.full_name': 1 }, { unique: true });
 issueSchema.index({ state: 1, created_at: -1 });
 issueSchema.index({ 'user.login': 1 });
 issueSchema.index({ 'assignee.login': 1 });
