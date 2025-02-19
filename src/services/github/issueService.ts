@@ -111,16 +111,21 @@ export const issueService = {
         }
     },
 
-    async getIssueById(issueNumber: number): Promise<GithubApiResponse<GithubIssue>> {
+    async getIssueById(issueNumber: number, repoName?: string): Promise<GithubApiResponse<GithubIssue>> {
         try {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
 
-            // Try to find issue in database first
-            const issueFromDb = await IssueModel.findOne({ number: issueNumber });
+            // Try to find issue in database first with repository context
+            const query = {
+                number: issueNumber,
+                'repository.name': repoName || config.repo,
+            };
+
+            const issueFromDb = await IssueModel.findOne(query);
 
             if (issueFromDb) {
-                debug.info(`Retrieved issue #${issueNumber} from database`);
+                debug.info(`Retrieved issue #${issueNumber} from database for repository ${repoName || config.repo}`);
                 return {
                     success: true,
                     data: issueFromDb,
@@ -130,14 +135,14 @@ export const issueService = {
             // If not in database, get from GitHub API
             const { data: issue } = await octokit.rest.issues.get({
                 owner: config.owner,
-                repo: config.repo,
+                repo: repoName || config.repo,
                 issue_number: issueNumber,
             });
 
             if (!issue) {
                 return {
                     success: false,
-                    error: `Issue #${issueNumber} not found`,
+                    error: `Issue #${issueNumber} not found in repository ${repoName || config.repo}`,
                 };
             }
 
@@ -190,10 +195,14 @@ export const issueService = {
                 },
             };
 
-            const savedIssue = await IssueModel.findOneAndUpdate({ number: issueNumber }, issueData, {
-                upsert: true,
-                new: true,
-            });
+            const savedIssue = await IssueModel.findOneAndUpdate(
+                {
+                    number: issueNumber,
+                    'repository.name': repoName || config.repo,
+                },
+                issueData,
+                { upsert: true, new: true }
+            );
 
             return {
                 success: true,
