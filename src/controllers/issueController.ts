@@ -7,7 +7,16 @@ import { logger } from '../utils/logger';
 export const issueController = {
     async getIssues(req: Request, res: Response) {
         try {
-            const { state = 'open', labels, since, page, per_page, sort, direction } = req.query;
+            const {
+                state = 'all',
+                labels,
+                since,
+                page = 1,
+                per_page = 50,
+                sort = 'updated_at',
+                direction = 'desc',
+                repository,
+            } = req.query;
 
             // Validate query parameters
             if (state && !['open', 'closed', 'all'].includes(state as string)) {
@@ -17,36 +26,46 @@ export const issueController = {
                 });
             }
 
-            if (sort && !['created', 'updated', 'comments'].includes(sort as string)) {
-                return res.status(400).json({
-                    success: false,
-                    error: "Sort must be 'created', 'updated' or 'comments'",
-                });
+            // Build query
+            const query: any = {};
+            if (state !== 'all') {
+                query.state = state;
+            }
+            if (labels) {
+                query['labels.name'] = {
+                    $in: Array.isArray(labels) ? labels : labels.split(','),
+                };
+            }
+            if (repository) {
+                query['repository.name'] = repository;
+            }
+            if (since) {
+                query.updated_at = { $gte: new Date(since as string) };
             }
 
-            if (direction && !['asc', 'desc'].includes(direction as string)) {
-                return res.status(400).json({
-                    success: false,
-                    error: "Direction must be 'asc' or 'desc'",
-                });
-            }
+            // Execute query with pagination
+            const skip = (Number(page) - 1) * Number(per_page);
+            const sortOrder = direction === 'desc' ? -1 : 1;
+            const sortOption = { [sort]: sortOrder };
 
-            const issues = await issueService.getIssues({
-                state: state as 'open' | 'closed' | 'all',
-                labels: Array.isArray(labels) ? labels : labels?.split(','),
-                since: since as string,
-                page: page ? Number(page) : undefined,
-                per_page: per_page ? Number(per_page) : undefined,
-                sort: sort as 'created' | 'updated' | 'comments',
-                direction: direction as 'asc' | 'desc',
+            const [issues, total] = await Promise.all([
+                IssueModel.find(query).sort(sortOption).skip(skip).limit(Number(per_page)).lean(),
+                IssueModel.countDocuments(query),
+            ]);
+
+            debug.info(`Retrieved ${issues.length} issues from database`);
+
+            return res.json({
+                success: true,
+                data: issues,
+                total,
+                pagination: {
+                    page: Number(page),
+                    per_page: Number(per_page),
+                    total_pages: Math.ceil(total / Number(per_page)),
+                    has_more: skip + issues.length < total,
+                },
             });
-
-            if (!issues.success) {
-                debug.error('Failed to fetch issues:', issues.error);
-                return res.status(400).json(issues);
-            }
-
-            return res.json(issues);
         } catch (error) {
             debug.error('Error in getIssues controller:', error);
             return res.status(500).json({
@@ -59,6 +78,7 @@ export const issueController = {
     async getIssueById(req: Request, res: Response) {
         try {
             const { issueNumber } = req.params;
+            const { repo } = req.query;
 
             if (!issueNumber || isNaN(Number(issueNumber))) {
                 return res.status(400).json({
@@ -67,7 +87,7 @@ export const issueController = {
                 });
             }
 
-            const issue = await issueService.getIssueById(Number(issueNumber));
+            const issue = await issueService.getIssueById(Number(issueNumber), repo as string);
 
             if (!issue.success) {
                 return res.status(404).json({
