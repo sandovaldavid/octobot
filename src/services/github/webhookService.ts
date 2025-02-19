@@ -2,6 +2,7 @@ import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { GithubApiResponse } from '@types/githubTypes';
 import { WEBHOOK_EVENTS, WebhookConfig, WebhookOptions } from '@types/webhookTypes';
+import { RepositoryModel } from '@models/repository';
 
 export class WebhookService {
     private static instance: WebhookService;
@@ -137,6 +138,73 @@ export class WebhookService {
             return {
                 success: false,
                 error: error.message || 'Unknown error occurred while removing webhook',
+            };
+        }
+    }
+
+    public async checkWebhook(
+        repoName: string
+    ): Promise<GithubApiResponse<{ exists: boolean; active?: boolean; channelId?: string }>> {
+        try {
+            const octokit = githubClient.getOctokit();
+            const config = githubClient.getConfig();
+            const apiUrl = process.env.API_URL;
+
+            if (!apiUrl) {
+                throw new Error('API_URL is not defined in environment variables');
+            }
+
+            // verify repository exists
+            try {
+                await octokit.rest.repos.get({
+                    owner: config.owner,
+                    repo: repoName,
+                });
+            } catch (error) {
+                if (error.status === 404) {
+                    return {
+                        success: false,
+                        error: `Repository '${repoName}' does not exist`,
+                    };
+                }
+                throw error;
+            }
+
+            // Buscar webhook existente
+            const { data: webhooks } = await octokit.rest.repos.listWebhooks({
+                owner: config.owner,
+                repo: repoName,
+            });
+
+            const webhookUrl = new URL('/api/webhooks/github', apiUrl).toString();
+            const webhook = webhooks.find((hook) => hook.config.url === webhookUrl);
+
+            if (!webhook) {
+                return {
+                    success: true,
+                    data: {
+                        exists: false,
+                    },
+                };
+            }
+
+            // get repository from database
+            const repository = await RepositoryModel.findOne({ name: repoName });
+            const channelId = repository?.webhookSettings?.channelId;
+
+            return {
+                success: true,
+                data: {
+                    exists: true,
+                    active: webhook.active,
+                    channelId,
+                },
+            };
+        } catch (error) {
+            debug.error('Error checking webhook:', error);
+            return {
+                success: false,
+                error: error.message || 'Unknown error occurred while checking webhook',
             };
         }
     }
