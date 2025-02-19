@@ -9,6 +9,28 @@ export const issueController = {
         try {
             const { state = 'open', labels, since, page, per_page, sort, direction } = req.query;
 
+            // Validate query parameters
+            if (state && !['open', 'closed', 'all'].includes(state as string)) {
+                return res.status(400).json({
+                    success: false,
+                    error: "State must be 'open', 'closed' or 'all'",
+                });
+            }
+
+            if (sort && !['created', 'updated', 'comments'].includes(sort as string)) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Sort must be 'created', 'updated' or 'comments'",
+                });
+            }
+
+            if (direction && !['asc', 'desc'].includes(direction as string)) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Direction must be 'asc' or 'desc'",
+                });
+            }
+
             const issues = await issueService.getIssues({
                 state: state as 'open' | 'closed' | 'all',
                 labels: Array.isArray(labels) ? labels : labels?.split(','),
@@ -19,10 +41,18 @@ export const issueController = {
                 direction: direction as 'asc' | 'desc',
             });
 
-            res.json(issues);
+            if (!issues.success) {
+                debug.error('Failed to fetch issues:', issues.error);
+                return res.status(400).json(issues);
+            }
+
+            return res.json(issues);
         } catch (error) {
             debug.error('Error in getIssues controller:', error);
-            res.status(500).json({ error: 'Internal Server Error' });
+            return res.status(500).json({
+                success: false,
+                error: 'Internal Server Error',
+            });
         }
     },
 
