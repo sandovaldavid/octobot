@@ -1,8 +1,11 @@
-import { Collection, CommandInteraction, ChatInputCommandInteraction } from 'discord.js';
-import { watch } from '@commands/watch/watch';
-import { sync } from '@commands/sync/sync'; 
-import { DiscordCommand } from '@types/discordTypes';
+import { Collection, ChatInputCommandInteraction } from 'discord.js';
 import { debug } from '@utils/logger';
+import { github } from './github';
+
+export interface DiscordCommand {
+    data: any;
+    execute(interaction: ChatInputCommandInteraction): Promise<void>;
+}
 
 class CommandRegistry {
     private static instance: CommandRegistry;
@@ -21,8 +24,7 @@ class CommandRegistry {
     }
 
     private registerCommands() {
-        this.commands.set(watch.data.name, watch);
-        this.commands.set(sync.data.name, sync);
+        this.commands.set(github.data.name, github);
         debug.info('Commands registered:', Array.from(this.commands.keys()));
     }
 
@@ -37,38 +39,22 @@ class CommandRegistry {
             const command = this.commands.get(interaction.commandName);
             if (!command) {
                 debug.warn(`Command not found: ${interaction.commandName}`);
-                if (!interaction.replied && !interaction.deferred) {
-                    await interaction.reply({
-                        content: 'Command not found',
-                        ephemeral: true,
-                    });
-                }
                 return;
             }
 
-            debug.info(`Executing command: ${interaction.commandName}`);
             await command.execute(interaction);
         } catch (error) {
-            debug.error(`Error executing command ${interaction.commandName}:`, error);
-
-            try {
-                const errorMessage = {
+            debug.error('Error executing command:', error);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
                     content: 'There was an error executing this command!',
                     ephemeral: true,
-                };
-
-                if (!interaction.replied && !interaction.deferred) {
-                    await interaction.reply(errorMessage);
-                } else if (interaction.deferred) {
-                    await interaction.editReply(errorMessage);
-                } else if (interaction.replied) {
-                    await interaction.followUp(errorMessage);
-                }
-            } catch (replyError) {
-                debug.error('Error sending error response:', replyError);
+                });
             }
         }
     }
 }
 
 export const commandRegistry = CommandRegistry.getInstance();
+
+export { github };
