@@ -19,9 +19,8 @@ export const issueService = {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
 
-            const { data } = await octokit.rest.issues.listForAuthenticatedUser({
-                filter: 'all', // can be 'assigned', 'created', 'mentioned', 'subscribed'
-
+            const { data: allIssues } = await octokit.rest.issues.listForAuthenticatedUser({
+                filter: 'all',
                 state: options.state || 'open',
                 labels: options.labels?.join(','),
                 since: options.since,
@@ -30,6 +29,11 @@ export const issueService = {
                 sort: options.sort || 'updated',
                 direction: options.direction || 'desc',
             });
+
+            // Filter out pull requests
+            const issues = allIssues.filter((issue) => !('pull_request' in issue));
+
+            debug.info(`Retrieved ${issues.length} issues (filtered from ${allIssues.length} total items)`);
 
             // Update database
             await Promise.all(
@@ -94,12 +98,12 @@ export const issueService = {
 
             return {
                 success: true,
-                data,
-                total: data.length,
+                data: issues,
+                total: issues.length,
                 pagination: {
                     page: options.page || 1,
                     per_page: options.per_page || 100,
-                    hasMore: data.length === (options.per_page || 100),
+                    hasMore: issues.length === (options.per_page || 100),
                 },
             };
         } catch (error) {
