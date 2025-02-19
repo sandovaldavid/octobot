@@ -34,20 +34,34 @@ export const github = {
         const subcommand = interaction.options.getSubcommand();
 
         try {
-            switch (group) {
-                case 'repo':
-                    const command = repoCommands[subcommand as keyof typeof repoCommands];
-                    if (command) {
-                        await command.execute(interaction);
-                    }
-                    break;
+            if (group === 'repo') {
+                const command = repoCommands[subcommand as keyof typeof repoCommands];
+                if (command) {
+                    await command.execute(interaction);
+                    return;
+                }
+            }
+            debug.warn(`Invalid command group/subcommand: ${group}/${subcommand}`);
+
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: 'Invalid command. Please try again.',
+                    ephemeral: true,
+                });
             }
         } catch (error) {
             debug.error(`Error executing command: ${error}`);
-            await interaction.reply({
-                content: 'There was an error executing this command!',
-                ephemeral: true,
-            });
+
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: 'There was an error executing this command!',
+                    ephemeral: true,
+                });
+            } else if (interaction.deferred && !interaction.replied) {
+                await interaction.editReply({
+                    content: 'There was an error executing this command!',
+                });
+            }
         }
     },
 };
