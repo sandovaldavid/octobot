@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { RepositoryModel } from '@models/repository';
 import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
+import { WEBHOOK_EVENTS } from '../../../types/webhookTypes';
 
 export const watch = {
     data: new SlashCommandBuilder()
@@ -10,12 +11,9 @@ export const watch = {
         .addSubcommand((subcommand) =>
             subcommand
                 .setName('watch')
-                .setDescription('Watch a GitHub repository for notifications')
+                .setDescription('Watch a GitHub repository')
                 .addStringOption((option) =>
-                    option
-                        .setName('name')
-                        .setDescription('Name of the repository to watch')
-                        .setRequired(true)
+                    option.setName('name').setDescription('Name of the repository to watch').setRequired(true)
                 )
         ),
 
@@ -23,8 +21,9 @@ export const watch = {
         try {
             await interaction.deferReply();
             const repoName = interaction.options.getString('name', true);
+            const channelId = interaction.channelId;
 
-            debug.info(`Attempting to watch repository: ${repoName}`);
+            debug.info(`Attempting to watch repository: ${repoName} in channel: ${channelId}`);
 
             const webhookResult = await webhookService.configureWebhook(repoName);
             if (!webhookResult.success) {
@@ -42,15 +41,15 @@ export const watch = {
                 {
                     webhookActive: true,
                     webhookSettings: {
-                        events: ['push', 'pull_request', 'issues', 'release', 'create', 'delete'],
-                        channelId: interaction.channelId,
+                        events: WEBHOOK_EVENTS,
+                        channelId: channelId,
                     },
                 },
                 { upsert: true }
             );
 
-            debug.info(`Successfully configured webhook for ${repoName} in channel ${interaction.channelId}`);
-            await interaction.editReply(`✅ Now watching \`${repoName}\` for updates in this channel`);
+            debug.info(`Successfully configured webhook for ${repoName} in channel ${channelId}`);
+            await interaction.editReply(`✅ Now watching \`${repoName}\` for updates in <#${channelId}>`);
         } catch (error) {
             debug.error('Error in watch command:', error);
             const errorMessage = '❌ Failed to watch repository. Please try again later.';
