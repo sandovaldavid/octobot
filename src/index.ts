@@ -49,9 +49,9 @@ const initializeServices = async () => {
         app.use(express.json());
 
         // Routes
-        app.use('/api', repositoryRoutes);
-        app.use('/api', issueRoutes);
-        app.use('/api', webhookRoutes);
+        app.use('/api/repositories', repositoryRoutes);
+        app.use('/api/issues', issueRoutes);
+        app.use('/api/webhooks', webhookRoutes);
 
         // Health check endpoint
         app.get('/health', (req, res) => {
