@@ -9,18 +9,19 @@ export const checkWebhook = {
             const repoName = interaction.options.getString('name', true);
 
             debug.info(`Checking webhook status for repository: ${repoName}`);
-            await interaction.editReply('🔍 Checking webhook status...');
 
             const result = await webhookService.checkWebhook(repoName);
 
             if (!result.success) {
-                debug.error('Check failed:', result.error);
-                return interaction.editReply(`❌ Error checking webhook: ${result.error}`);
+                debug.warn(`Check failed for ${repoName}: ${result.error}`);
+                await interaction.editReply({
+                    content: `❌ ${result.error}`,
+                    flags: 64,
+                });
+                return;
             }
 
-            const hasWebhook = result.data?.exists;
-            const isActive = result.data?.active;
-            const channelId = result.data?.channelId;
+            const { exists: hasWebhook, active: isActive, channelId } = result.data || {};
 
             let message = hasWebhook
                 ? `✅ Repository \`${repoName}\` has a webhook configured\n`
@@ -33,16 +34,22 @@ export const checkWebhook = {
                 }
             }
 
-            await interaction.editReply(message);
+            await interaction.editReply({
+                content: message,
+                flags: 64,
+            });
         } catch (error) {
             debug.error('Error in check-webhook command:', error);
-            if (interaction.deferred) {
-                await interaction.editReply('❌ Failed to check webhook status. Please try again later.');
-            } else {
-                await interaction.reply({
-                    content: '❌ Failed to check webhook status. Please try again later.',
-                    flags: 64,
-                });
+
+            try {
+                if (interaction.deferred) {
+                    await interaction.editReply({
+                        content: '❌ Failed to check webhook status. Please try again later.',
+                        flags: 64,
+                    });
+                }
+            } catch (replyError) {
+                debug.error('Error sending error response:', replyError);
             }
         }
     },
