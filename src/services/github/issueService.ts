@@ -32,12 +32,12 @@ export const issueService = {
 
             // Filter out pull requests
             const issues = allIssues.filter((issue) => !('pull_request' in issue));
-
             debug.info(`Retrieved ${issues.length} issues (filtered from ${allIssues.length} total items)`);
 
             // Update database
             await Promise.all(
-                data.map(async (issue) => {
+                issues.map(async (issue) => {
+                    // Changed from data.map to issues.map
                     const issueData = {
                         githubId: issue.id,
                         number: issue.number,
@@ -281,20 +281,21 @@ export const issueService = {
 
     async syncIssues(): Promise<GithubApiResponse<{ total: number; synced: number }>> {
         try {
-            const octokit = githubClient.getOctokit();
-            const config = githubClient.getConfig();
-
             debug.info('Starting issues synchronization');
 
-            // Get all issues from GitHub (both open and closed)
-            const { data: issues } = await octokit.rest.issues.listForAuthenticatedUser({
-                filter: 'all',
+            // Use getIssues function to get filtered issues (no pull requests)
+            const result = await this.getIssues({
                 state: 'all',
                 per_page: 100,
                 sort: 'updated',
                 direction: 'desc',
             });
 
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to fetch issues');
+            }
+
+            const issues = result.data;
             debug.info(`Found ${issues.length} issues to sync`);
 
             // Update database
