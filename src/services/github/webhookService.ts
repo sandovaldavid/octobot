@@ -151,10 +151,14 @@ export class WebhookService {
             const apiUrl = process.env.API_URL;
 
             if (!apiUrl) {
-                throw new Error('API_URL is not defined in environment variables');
+                debug.error('API_URL not configured');
+                return {
+                    success: false,
+                    error: 'API_URL is not defined in environment variables',
+                };
             }
 
-            // verify repository exists
+            // Verify repository exists
             try {
                 await octokit.rest.repos.get({
                     owner: config.owner,
@@ -162,24 +166,34 @@ export class WebhookService {
                 });
             } catch (error) {
                 if (error.status === 404) {
+                    const errorMsg = `Repository '${repoName}' does not exist in ${config.owner}'s account`;
+                    debug.warn(errorMsg);
                     return {
                         success: false,
-                        error: `Repository '${repoName}' does not exist`,
+                        error: errorMsg,
                     };
                 }
                 throw error;
             }
 
-            // Buscar webhook existente
-            const { data: webhooks } = await octokit.rest.repos.listWebhooks({
-                owner: config.owner,
-                repo: repoName,
-            });
-
+            // Get webhook configuration
             const webhookUrl = new URL('/api/webhooks/github', apiUrl).toString();
+
+            // Get existing webhooks
+            const { data: webhooks } = await octokit.rest.repos
+                .listWebhooks({
+                    owner: config.owner,
+                    repo: repoName,
+                })
+                .catch((error) => {
+                    debug.error(`Error listing webhooks: ${error.message}`);
+                    throw error;
+                });
+
             const webhook = webhooks.find((hook) => hook.config.url === webhookUrl);
 
             if (!webhook) {
+                debug.info(`No webhook found for repository ${repoName}`);
                 return {
                     success: true,
                     data: {
@@ -188,10 +202,11 @@ export class WebhookService {
                 };
             }
 
-            // get repository from database
+            // Get repository info from database
             const repository = await RepositoryModel.findOne({ name: repoName });
             const channelId = repository?.webhookSettings?.channelId;
 
+            debug.info(`Webhook found for ${repoName} - Active: ${webhook.active}, Channel: ${channelId || 'Not set'}`);
             return {
                 success: true,
                 data: {
@@ -201,10 +216,11 @@ export class WebhookService {
                 },
             };
         } catch (error) {
-            debug.error('Error checking webhook:', error);
+            const errorMsg = error.message || 'Failed to check webhook status';
+            debug.error('Error checking webhook:', errorMsg);
             return {
                 success: false,
-                error: error.message || 'Unknown error occurred while checking webhook',
+                error: errorMsg,
             };
         }
     }
