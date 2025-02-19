@@ -138,4 +138,51 @@ export const issueController = {
             });
         }
     },
+
+    async getIssuesByRepository(req: Request, res: Response) {
+        try {
+            const { repoName } = req.params;
+            const {
+                state = 'all',
+                labels,
+                since,
+                page = 1,
+                per_page = 50,
+                sort = 'updated',
+                direction = 'desc',
+            } = req.query;
+
+            if (!repoName) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Repository name is required',
+                });
+            }
+
+            const result = await issueService.getIssuesByRepository(repoName, {
+                state: state as 'open' | 'closed' | 'all',
+                labels: Array.isArray(labels) ? labels : labels?.split(','),
+                since: since as string,
+                page: Number(page),
+                per_page: Number(per_page),
+                sort: sort as 'created' | 'updated' | 'comments',
+                direction: direction as 'asc' | 'desc',
+            });
+
+            if (!result.success) {
+                return res.status(404).json({
+                    success: false,
+                    error: result.error,
+                });
+            }
+
+            return res.json(result);
+        } catch (error) {
+            debug.error('Error in getIssuesByRepository controller:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Internal Server Error',
+            });
+        }
+    },
 };
