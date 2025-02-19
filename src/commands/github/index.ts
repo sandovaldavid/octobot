@@ -27,6 +27,14 @@ export const github = {
                         )
                 )
                 .addSubcommand((subcommand) => subcommand.setName('sync').setDescription('Sync repositories'))
+                .addSubcommand((subcommand) =>
+                    subcommand
+                        .setName('check-webhook')
+                        .setDescription('Check if a repository has an active webhook')
+                        .addStringOption((option) =>
+                            option.setName('name').setDescription('Name of the repository to check').setRequired(true)
+                        )
+                )
         ),
 
     async execute(interaction: ChatInputCommandInteraction) {
@@ -35,27 +43,26 @@ export const github = {
 
         try {
             if (group === 'repo') {
-                const command = repoCommands[subcommand as keyof typeof repoCommands];
-                if (command) {
-                    await command.execute(interaction);
+                const handler = repoCommands.handlers[subcommand];
+                if (handler) {
+                    await handler(interaction);
                     return;
                 }
             }
-            debug.warn(`Invalid command group/subcommand: ${group}/${subcommand}`);
 
+            debug.warn(`Invalid command group/subcommand: ${group}/${subcommand}`);
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: 'Invalid command. Please try again.',
-                    ephemeral: true,
+                    flags: 64,
                 });
             }
         } catch (error) {
             debug.error(`Error executing command: ${error}`);
-
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: 'There was an error executing this command!',
-                    ephemeral: true,
+                    flags: 64,
                 });
             } else if (interaction.deferred && !interaction.replied) {
                 await interaction.editReply({
