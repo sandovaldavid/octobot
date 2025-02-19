@@ -19,96 +19,87 @@ export const issueService = {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
 
-            const {
-                state = 'open',
-                labels,
-                since,
-                page = 1,
-                per_page = 100,
-                sort = 'updated',
-                direction = 'desc',
-            } = options;
-
             const { data } = await octokit.rest.issues.listForAuthenticatedUser({
                 filter: 'all', // can be 'assigned', 'created', 'mentioned', 'subscribed'
-                state,
-                labels: labels?.join(','),
-                since,
-                page,
-                per_page,
-                sort,
-                direction,
+
+                state: options.state || 'open',
+                labels: options.labels?.join(','),
+                since: options.since,
+                page: options.page || 1,
+                per_page: options.per_page || 100,
+                sort: options.sort || 'updated',
+                direction: options.direction || 'desc',
             });
 
+            // Update database
             await Promise.all(
                 data.map(async (issue) => {
-                    await IssueModel.findOneAndUpdate(
-                        { githubId: issue.id },
-                        {
-                            githubId: issue.id,
-                            number: issue.number,
-                            title: issue.title,
-                            body: issue.body,
-                            state: issue.state,
-                            labels: issue.labels.map((label) => ({
-                                id: label.id,
-                                name: label.name,
-                                description: label.description,
-                                color: label.color,
-                            })),
-                            user: {
-                                login: issue.user.login,
-                                id: issue.user.id,
-                                type: issue.user.type,
-                                avatar_url: issue.user.avatar_url,
-                            },
-                            assignee: issue.assignee
-                                ? {
-                                      login: issue.assignee.login,
-                                      id: issue.assignee.id,
-                                      type: issue.assignee.type,
-                                      avatar_url: issue.assignee.avatar_url,
-                                  }
-                                : null,
-                            repository: {
-                                id: issue.repository.id,
-                                name: issue.repository.name,
-                                full_name: issue.repository.full_name,
-                                private: issue.repository.private,
-                            },
-                            comments: issue.comments,
-                            created_at: new Date(issue.created_at),
-                            updated_at: new Date(issue.updated_at),
-                            closed_at: issue.closed_at ? new Date(issue.closed_at) : null,
-                            url: issue.url,
-                            html_url: issue.html_url,
-                            comments_url: issue.comments_url,
-                            locked: issue.locked,
-                            milestone: issue.milestone
-                                ? {
-                                      id: issue.milestone.id,
-                                      number: issue.milestone.number,
-                                      title: issue.milestone.title,
-                                      description: issue.milestone.description,
-                                      state: issue.milestone.state,
-                                      due_on: new Date(issue.milestone.due_on),
-                                  }
-                                : null,
+                    const issueData = {
+                        githubId: issue.id,
+                        number: issue.number,
+                        title: issue.title,
+                        body: issue.body,
+                        state: issue.state,
+                        labels: issue.labels.map((label) => ({
+                            id: label.id,
+                            name: label.name,
+                            description: label.description,
+                            color: label.color,
+                        })),
+                        user: issue.user
+                            ? {
+                                  login: issue.user.login,
+                                  id: issue.user.id,
+                                  type: issue.user.type,
+                                  avatar_url: issue.user.avatar_url,
+                              }
+                            : undefined,
+                        assignee: issue.assignee
+                            ? {
+                                  login: issue.assignee.login,
+                                  id: issue.assignee.id,
+                                  type: issue.assignee.type,
+                                  avatar_url: issue.assignee.avatar_url,
+                              }
+                            : undefined,
+                        repository: {
+                            id: issue.repository.id,
+                            name: issue.repository.name,
+                            full_name: issue.repository.full_name,
+                            private: issue.repository.private,
                         },
-                        { upsert: true, new: true }
-                    );
+                        comments: issue.comments,
+                        created_at: new Date(issue.created_at),
+                        updated_at: new Date(issue.updated_at),
+                        closed_at: issue.closed_at ? new Date(issue.closed_at) : null,
+                        url: issue.url,
+                        html_url: issue.html_url,
+                        comments_url: issue.comments_url,
+                        locked: issue.locked,
+                        milestone: issue.milestone
+                            ? {
+                                  id: issue.milestone.id,
+                                  number: issue.milestone.number,
+                                  title: issue.milestone.title,
+                                  description: issue.milestone.description,
+                                  state: issue.milestone.state,
+                                  due_on: new Date(issue.milestone.due_on),
+                              }
+                            : undefined,
+                    };
+
+                    await IssueModel.findOneAndUpdate({ githubId: issue.id }, issueData, { upsert: true, new: true });
                 })
             );
 
-            debug.info(`Retrieved ${data.length} issues for user ${config.owner}`);
             return {
                 success: true,
                 data,
                 total: data.length,
                 pagination: {
-                    page,
-                    per_page,
-                    hasMore: data.length === per_page,
+                    page: options.page || 1,
+                    per_page: options.per_page || 100,
+                    hasMore: data.length === (options.per_page || 100),
                 },
             };
         } catch (error) {
