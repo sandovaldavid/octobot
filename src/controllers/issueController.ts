@@ -59,11 +59,30 @@ export const issueController = {
     async getIssueById(req: Request, res: Response) {
         try {
             const { issueNumber } = req.params;
+
+            if (!issueNumber || isNaN(Number(issueNumber))) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid issue number',
+                });
+            }
+
             const issue = await issueService.getIssueById(Number(issueNumber));
-            res.json(issue);
+
+            if (!issue.success) {
+                return res.status(404).json({
+                    success: false,
+                    error: issue.error,
+                });
+            }
+
+            return res.json(issue);
         } catch (error) {
             debug.error('Error in getIssueById controller:', error);
-            res.status(500).json({ error: 'Internal Server Error' });
+            return res.status(500).json({
+                success: false,
+                error: 'Internal Server Error',
+            });
         }
     },
 
