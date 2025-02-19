@@ -13,31 +13,53 @@ export const issueService = {
             per_page?: number;
             sort?: 'created' | 'updated' | 'comments';
             direction?: 'asc' | 'desc';
+            repo?: string;
         } = {}
     ): Promise<GithubApiResponse<GithubIssue[]>> {
         try {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
 
-            const { data: allIssues } = await octokit.rest.issues.listForAuthenticatedUser({
-                filter: 'all',
-                state: options.state || 'open',
-                labels: options.labels?.join(','),
-                since: options.since,
-                page: options.page || 1,
-                per_page: options.per_page || 100,
-                sort: options.sort || 'updated',
-                direction: options.direction || 'desc',
-            });
+            let issues: any[];
+
+            if (options.repo) {
+                // If repo is specified, get issues for that specific repository
+                const { data } = await octokit.rest.issues.listForRepo({
+                    owner: config.owner,
+                    repo: options.repo,
+                    state: options.state || 'open',
+                    labels: options.labels?.join(','),
+                    since: options.since,
+                    page: options.page || 1,
+                    per_page: options.per_page || 100,
+                    sort: options.sort || 'updated',
+                    direction: options.direction || 'desc',
+                });
+                issues = data;
+                debug.info(`Retrieved ${issues.length} issues for repository ${options.repo}`);
+            } else {
+                // If no repo specified, get all issues for authenticated user
+                const { data: allIssues } = await octokit.rest.issues.listForAuthenticatedUser({
+                    filter: 'all',
+                    state: options.state || 'open',
+                    labels: options.labels?.join(','),
+                    since: options.since,
+                    page: options.page || 1,
+                    per_page: options.per_page || 100,
+                    sort: options.sort || 'updated',
+                    direction: options.direction || 'desc',
+                });
+                issues = allIssues;
+                debug.info(`Retrieved ${issues.length} issues from all repositories`);
+            }
 
             // Filter out pull requests
-            const issues = allIssues.filter((issue) => !('pull_request' in issue));
-            debug.info(`Retrieved ${issues.length} issues (filtered from ${allIssues.length} total items)`);
+            const filteredIssues = issues.filter((issue) => !('pull_request' in issue));
+            debug.info(`Filtered to ${filteredIssues.length} issues (excluding pull requests)`);
 
             // Update database
             await Promise.all(
-                issues.map(async (issue) => {
-                    // Changed from data.map to issues.map
+                filteredIssues.map(async (issue) => {
                     const issueData = {
                         githubId: issue.id,
                         number: issue.number,
@@ -50,22 +72,18 @@ export const issueService = {
                             description: label.description,
                             color: label.color,
                         })),
-                        user: issue.user
-                            ? {
-                                  login: issue.user.login,
-                                  id: issue.user.id,
-                                  type: issue.user.type,
-                                  avatar_url: issue.user.avatar_url,
-                              }
-                            : undefined,
-                        assignee: issue.assignee
-                            ? {
-                                  login: issue.assignee.login,
-                                  id: issue.assignee.id,
-                                  type: issue.assignee.type,
-                                  avatar_url: issue.assignee.avatar_url,
-                              }
-                            : undefined,
+                        user: issue.user && {
+                            login: issue.user.login,
+                            id: issue.user.id,
+                            type: issue.user.type,
+                            avatar_url: issue.user.avatar_url,
+                        },
+                        assignee: issue.assignee && {
+                            login: issue.assignee.login,
+                            id: issue.assignee.id,
+                            type: issue.assignee.type,
+                            avatar_url: issue.assignee.avatar_url,
+                        },
                         repository: {
                             id: issue.repository.id,
                             name: issue.repository.name,
@@ -80,33 +98,44 @@ export const issueService = {
                         html_url: issue.html_url,
                         comments_url: issue.comments_url,
                         locked: issue.locked,
-                        milestone: issue.milestone
-                            ? {
-                                  id: issue.milestone.id,
-                                  number: issue.milestone.number,
-                                  title: issue.milestone.title,
-                                  description: issue.milestone.description,
-                                  state: issue.milestone.state,
-                                  due_on: new Date(issue.milestone.due_on),
-                              }
-                            : undefined,
+                        milestone: issue.milestone && {
+                            id: issue.milestone.id,
+                            number: issue.milestone.number,
+                            title: issue.milestone.title,
+                            description: issue.milestone.description,
+                            state: issue.milestone.state,
+                            due_on: new Date(issue.milestone.due_on),
+                        },
                     };
 
-                    await IssueModel.findOneAndUpdate({ githubId: issue.id }, issueData, { upsert: true, new: true });
+                    await IssueModel.findOneAndUpdate(
+                        {
+                            githubId: issue.id,
+                            'repository.name': issue.repository.name,
+                        },
+                        issueData,
+                        { upsert: true, new: true }
+                    );
                 })
             );
 
             return {
                 success: true,
-                data: issues,
-                total: issues.length,
+                data: filteredIssues,
+                total: filteredIssues.length,
                 pagination: {
                     page: options.page || 1,
                     per_page: options.per_page || 100,
-                    hasMore: issues.length === (options.per_page || 100),
+                    hasMore: filteredIssues.length === (options.per_page || 100),
                 },
             };
-        } catch (error) {
+        } catch (error: any) {
+            if (error.status === 404 && options.repo) {
+                return {
+                    success: false,
+                    error: `Repository ${options.repo} not found`,
+                };
+            }
             debug.error('Error fetching issues:', error);
             return {
                 success: false,
