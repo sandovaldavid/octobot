@@ -12,14 +12,17 @@ export const unwatch = {
                 .setName('unwatch')
                 .setDescription('Stop watching a GitHub repository')
                 .addStringOption((option) =>
-                    option.setName('repository').setDescription('Name of the repository to unwatch').setRequired(true)
+                    option
+                        .setName('name')
+                        .setDescription('Name of the repository to unwatch')
+                        .setRequired(true)
                 )
         ),
 
     async execute(interaction: ChatInputCommandInteraction) {
         try {
             await interaction.deferReply();
-            const repoName = interaction.options.getString('repository', true);
+            const repoName = interaction.options.getString('name', true);
 
             debug.info(`Attempting to unwatch repository: ${repoName}`);
 
