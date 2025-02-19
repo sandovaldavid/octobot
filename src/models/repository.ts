@@ -1,9 +1,14 @@
 import mongoose, { Document } from 'mongoose';
 import { GithubRepository } from '@types/githubTypes';
+import { WEBHOOK_EVENTS } from '@types/webhookTypes';
 
 export interface IRepository extends Document, Omit<GithubRepository, 'id'> {
     githubId: number;
     webhookActive: boolean;
+    webhookSettings?: {
+        events: typeof WEBHOOK_EVENTS;
+        channelId: string;
+    };
 }
 
 const repositorySchema = new mongoose.Schema({
@@ -97,7 +102,7 @@ const repositorySchema = new mongoose.Schema({
         events: [
             {
                 type: String,
-                enum: ['push', 'pull_request', 'issues', 'release', 'create', 'delete'],
+                enum: WEBHOOK_EVENTS,
             },
         ],
         channelId: String,

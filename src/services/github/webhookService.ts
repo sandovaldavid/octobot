@@ -2,6 +2,7 @@ import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { GithubApiResponse } from '@types/githubTypes';
 import { WEBHOOK_EVENTS, WebhookConfig, WebhookOptions } from '@types/webhookTypes';
+import { RepositoryModel } from '@models/repository';
 
 export class WebhookService {
     private static instance: WebhookService;
@@ -137,6 +138,89 @@ export class WebhookService {
             return {
                 success: false,
                 error: error.message || 'Unknown error occurred while removing webhook',
+            };
+        }
+    }
+
+    public async checkWebhook(
+        repoName: string
+    ): Promise<GithubApiResponse<{ exists: boolean; active?: boolean; channelId?: string }>> {
+        try {
+            const octokit = githubClient.getOctokit();
+            const config = githubClient.getConfig();
+            const apiUrl = process.env.API_URL;
+
+            if (!apiUrl) {
+                debug.error('API_URL not configured');
+                return {
+                    success: false,
+                    error: 'API_URL is not defined in environment variables',
+                };
+            }
+
+            // Verify repository exists
+            try {
+                await octokit.rest.repos.get({
+                    owner: config.owner,
+                    repo: repoName,
+                });
+            } catch (error) {
+                if (error.status === 404) {
+                    const errorMsg = `Repository '${repoName}' does not exist in ${config.owner}'s account`;
+                    debug.warn(errorMsg);
+                    return {
+                        success: false,
+                        error: errorMsg,
+                    };
+                }
+                throw error;
+            }
+
+            // Get webhook configuration
+            const webhookUrl = new URL('/api/webhooks/github', apiUrl).toString();
+
+            // Get existing webhooks
+            const { data: webhooks } = await octokit.rest.repos
+                .listWebhooks({
+                    owner: config.owner,
+                    repo: repoName,
+                })
+                .catch((error) => {
+                    debug.error(`Error listing webhooks: ${error.message}`);
+                    throw error;
+                });
+
+            const webhook = webhooks.find((hook) => hook.config.url === webhookUrl);
+
+            if (!webhook) {
+                debug.info(`No webhook found for repository ${repoName}`);
+                return {
+                    success: true,
+                    data: {
+                        exists: false,
+                    },
+                };
+            }
+
+            // Get repository info from database
+            const repository = await RepositoryModel.findOne({ name: repoName });
+            const channelId = repository?.webhookSettings?.channelId;
+
+            debug.info(`Webhook found for ${repoName} - Active: ${webhook.active}, Channel: ${channelId || 'Not set'}`);
+            return {
+                success: true,
+                data: {
+                    exists: true,
+                    active: webhook.active,
+                    channelId,
+                },
+            };
+        } catch (error) {
+            const errorMsg = error.message || 'Failed to check webhook status';
+            debug.error('Error checking webhook:', errorMsg);
+            return {
+                success: false,
+                error: errorMsg,
             };
         }
     }

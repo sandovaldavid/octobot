@@ -31,9 +31,18 @@ export const handleGithubWebhook = async (event: string, payload: any) => {
 
         const handler = handlers[event as keyof typeof handlers];
         if (handler) {
-            const channelId = process.env.DISCORD_CHANNEL_ID;
-            await handler(channelId, payload);
-            debug.info(`Processed ${event} webhook for ${payload.repository.full_name}`);
+            const repository = await RepositoryModel.findOne({
+                name: payload.repository.name,
+            });
+
+            if (repository?.webhookSettings?.channelId) {
+                await handler(repository.webhookSettings.channelId, payload);
+                debug.info(
+                    `Processed ${event} webhook for ${payload.repository.full_name} in channel ${repository.webhookSettings.channelId}`
+                );
+            } else {
+                debug.warn(`No channel configured for repository ${payload.repository.name}`);
+            }
         } else {
             debug.warn(`No handler found for event type: ${event}`);
         }
