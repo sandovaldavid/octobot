@@ -138,28 +138,40 @@ export const list = {
             });
 
             collector.on('collect', async (i) => {
-                if (i.user.id !== interaction.user.id) {
-                    await i.reply({
-                        content: 'You cannot use these buttons',
-                        ephemeral: true,
-                    });
-                    return;
-                }
+                try {
+                    if (i.user.id !== interaction.user.id) {
+                        await i.reply({
+                            content: 'You cannot use these buttons',
+                            ephemeral: true,
+                        });
+                        return;
+                    }
 
-                await i.deferUpdate();
+                    // Update currentPage before deferring
+                    if (i.customId === 'prev') {
+                        currentPage--;
+                    } else if (i.customId === 'next') {
+                        currentPage++;
+                    }
 
-                if (i.customId === 'prev') {
-                    currentPage--;
-                } else if (i.customId === 'next') {
-                    currentPage++;
-                }
+                    // Defer the button interaction first
+                    await i.deferUpdate();
 
-                const result = await displayIssues(currentPage);
-                if (result) {
-                    await interaction.editReply({
-                        embeds: [result.embed],
-                        components: [result.buttons],
-                    });
+                    const result = await displayIssues(currentPage);
+                    if (result) {
+                        await i.editReply({
+                            embeds: [result.embed],
+                            components: [result.buttons],
+                        });
+                    }
+                } catch (error) {
+                    debug.error('Error handling button interaction:', error);
+                    if (!i.replied && !i.deferred) {
+                        await i.reply({
+                            content: 'An error occurred while handling the button interaction',
+                            ephemeral: true,
+                        });
+                    }
                 }
             });
 
