@@ -3,6 +3,19 @@ import { debug } from '@utils/logger';
 import { GithubIssue, GithubApiResponse } from '@types/githubTypes';
 import { IssueModel } from '@models/issue';
 
+const issuesCache = new Map<
+    string,
+    {
+        issues: any[];
+        timestamp: number;
+    }
+>();
+
+// Helper function
+function getCacheKey(options: any): string {
+    return `${options.repo || 'all'}_${options.state || 'open'}`;
+}
+
 export const issueService = {
     async getIssues(
         options: {
@@ -17,6 +30,31 @@ export const issueService = {
         } = {}
     ): Promise<GithubApiResponse<GithubIssue[]>> {
         try {
+            // Check cache first
+            const cacheKey = getCacheKey(options);
+            const cached = issuesCache.get(cacheKey);
+            const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+            if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+                const filteredIssues = cached.issues;
+                const page = options.page || 1;
+                const perPage = options.per_page || 10;
+                const startIndex = (page - 1) * perPage;
+                const endIndex = startIndex + perPage;
+                const paginatedIssues = filteredIssues.slice(startIndex, endIndex);
+
+                return {
+                    success: true,
+                    data: paginatedIssues,
+                    total: filteredIssues.length,
+                    pagination: {
+                        page,
+                        per_page: perPage,
+                        hasMore: endIndex < filteredIssues.length,
+                    },
+                };
+            }
+
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
             let allIssues: any[] = [];
@@ -96,6 +134,12 @@ export const issueService = {
             // Filter out pull requests
             const filteredIssues = allIssues.filter((issue) => !('pull_request' in issue));
             debug.info(`Filtered to ${filteredIssues.length} issues (excluding pull requests)`);
+
+            // Cache the filtered results before pagination
+            issuesCache.set(cacheKey, {
+                issues: filteredIssues,
+                timestamp: Date.now(),
+            });
 
             // Handle pagination
             const page = options.page || 1;
