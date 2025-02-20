@@ -2,6 +2,7 @@ import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { GithubIssue, GithubApiResponse } from '@types/githubTypes';
 import { IssueModel } from '@models/issue';
+import { RepositoryModel } from '@models/repository';
 
 const issuesCache = new Map<
     string,
@@ -359,95 +360,137 @@ export const issueService = {
     async syncIssues(): Promise<GithubApiResponse<{ total: number; synced: number }>> {
         try {
             debug.info('Starting issues synchronization');
+            const octokit = githubClient.getOctokit();
+            const config = githubClient.getConfig();
 
-            // Use getIssues function to get filtered issues (no pull requests)
-            const result = await this.getIssues({
-                state: 'all',
-                per_page: 100,
-                sort: 'updated',
-                direction: 'desc',
-            });
-
-            if (!result.success) {
-                throw new Error(result.error || 'Failed to fetch issues');
+            // Get repositories from database
+            const storedRepos = await RepositoryModel.find({}, { name: 1, id: 1 }).lean();
+            if (!storedRepos.length) {
+                debug.warn('No repositories found in database');
+                return {
+                    success: false,
+                    error: 'No repositories found in database',
+                };
             }
 
-            const issues = result.data;
-            debug.info(`Found ${issues.length} issues to sync`);
+            debug.info(`Found ${storedRepos.length} repositories in database`);
+            issuesCache.clear();
 
-            // Update database
-            const syncResults = await Promise.all(
-                issues.map(async (issue) => {
-                    const issueData = {
-                        githubId: issue.id,
-                        number: issue.number,
-                        title: issue.title,
-                        body: issue.body,
-                        state: issue.state,
-                        labels: issue.labels.map((label) => ({
-                            id: label.id,
-                            name: label.name,
-                            description: label.description,
-                            color: label.color,
-                        })),
-                        user: issue.user && {
-                            login: issue.user.login,
-                            id: issue.user.id,
-                            type: issue.user.type,
-                            avatar_url: issue.user.avatar_url,
-                        },
-                        assignee: issue.assignee && {
-                            login: issue.assignee.login,
-                            id: issue.assignee.id,
-                            type: issue.assignee.type,
-                            avatar_url: issue.assignee.avatar_url,
-                        },
-                        repository: {
-                            id: issue.repository.id,
-                            name: issue.repository.name,
-                            full_name: issue.repository.full_name,
-                            private: issue.repository.private,
-                        },
-                        comments: issue.comments,
-                        created_at: new Date(issue.created_at),
-                        updated_at: new Date(issue.updated_at),
-                        closed_at: issue.closed_at ? new Date(issue.closed_at) : null,
-                        url: issue.url,
-                        html_url: issue.html_url,
-                        comments_url: issue.comments_url,
-                        locked: issue.locked,
-                        milestone: issue.milestone && {
-                            id: issue.milestone.id,
-                            number: issue.milestone.number,
-                            title: issue.milestone.title,
-                            description: issue.milestone.description,
-                            state: issue.milestone.state,
-                            due_on: new Date(issue.milestone.due_on),
-                        },
-                    };
+            let totalIssues = 0;
+            let syncedCount = 0;
 
-                    try {
-                        await IssueModel.findOneAndUpdate({ githubId: issue.id }, issueData, {
-                            upsert: true,
-                            new: true,
-                        });
-                        return true;
-                    } catch (error) {
-                        debug.error(`Error syncing issue #${issue.number}:`, error);
-                        return false;
-                    }
-                })
-            );
+            // Process repositories in parallel with controlled concurrency
+            const CONCURRENT_REPOS = 3;
+            const chunks = [];
+            for (let i = 0; i < storedRepos.length; i += CONCURRENT_REPOS) {
+                chunks.push(storedRepos.slice(i, i + CONCURRENT_REPOS));
+            }
 
-            const syncedCount = syncResults.filter(Boolean).length;
-            debug.info(`Successfully synced ${syncedCount}/${issues.length} issues`);
+            for (const chunk of chunks) {
+                const repoResults = await Promise.all(
+                    chunk.map(async (repo) => {
+                        try {
+                            const [openIssues, closedIssues] = await Promise.all([
+                                octokit.rest.issues.listForRepo({
+                                    owner: config.owner,
+                                    repo: repo.name,
+                                    state: 'open',
+                                    per_page: 100,
+                                }),
+                                octokit.rest.issues.listForRepo({
+                                    owner: config.owner,
+                                    repo: repo.name,
+                                    state: 'closed',
+                                    per_page: 100,
+                                }),
+                            ]);
 
+                            const issues = [...openIssues.data, ...closedIssues.data]
+                                .filter((issue) => !('pull_request' in issue))
+                                .map((issue) => ({
+                                    githubId: issue.id,
+                                    number: issue.number,
+                                    title: issue.title,
+                                    body: issue.body || '',
+                                    state: issue.state,
+                                    labels: issue.labels.map((label) => ({
+                                        id: label.id,
+                                        name: label.name,
+                                        description: label.description || '',
+                                        color: label.color,
+                                    })),
+                                    user: issue.user && {
+                                        login: issue.user.login,
+                                        id: issue.user.id,
+                                        type: issue.user.type,
+                                        avatar_url: issue.user.avatar_url,
+                                    },
+                                    assignee: issue.assignee && {
+                                        login: issue.assignee.login,
+                                        id: issue.assignee.id,
+                                        type: issue.assignee.type,
+                                        avatar_url: issue.assignee.avatar_url,
+                                    },
+                                    repository: {
+                                        id: repo.id,
+                                        name: repo.name,
+                                        full_name: `${config.owner}/${repo.name}`,
+                                        private: false,
+                                    },
+                                    comments: issue.comments || 0,
+                                    created_at: new Date(issue.created_at),
+                                    updated_at: new Date(issue.updated_at),
+                                    closed_at: issue.closed_at ? new Date(issue.closed_at) : null,
+                                    url: issue.url,
+                                    html_url: issue.html_url,
+                                    comments_url: issue.comments_url,
+                                    locked: issue.locked || false,
+                                    milestone: issue.milestone
+                                        ? {
+                                              id: issue.milestone.id,
+                                              number: issue.milestone.number,
+                                              title: issue.milestone.title,
+                                              description: issue.milestone.description || '',
+                                              state: issue.milestone.state,
+                                              due_on: issue.milestone.due_on ? new Date(issue.milestone.due_on) : null,
+                                          }
+                                        : null,
+                                }));
+
+                            totalIssues += issues.length;
+
+                            if (issues.length > 0) {
+                                const bulkOps = issues.map((issue) => ({
+                                    updateOne: {
+                                        filter: {
+                                            githubId: issue.githubId,
+                                            'repository.name': issue.repository.name,
+                                        },
+                                        update: { $set: issue },
+                                        upsert: true,
+                                    },
+                                }));
+
+                                const result = await IssueModel.bulkWrite(bulkOps);
+                                syncedCount += result.upsertedCount + result.modifiedCount;
+                            }
+
+                            debug.info(`Synced ${issues.length} issues from ${repo.name}`);
+                            return issues.length;
+                        } catch (error) {
+                            debug.error(`Error syncing issues for ${repo.name}:`, error);
+                            return 0;
+                        }
+                    })
+                );
+
+                debug.info(`Processed chunk of ${chunk.length} repositories`);
+            }
+
+            debug.info(`Sync completed: ${syncedCount}/${totalIssues} issues synchronized`);
             return {
                 success: true,
-                data: {
-                    total: issues.length,
-                    synced: syncedCount,
-                },
+                data: { total: totalIssues, synced: syncedCount },
             };
         } catch (error) {
             debug.error('Error syncing issues:', error);
