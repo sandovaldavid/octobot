@@ -20,7 +20,7 @@ export const issueService = {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
 
-            let issues: any[];
+            let issues: any[] = [];
             let repository: any;
 
             if (options.repo) {
@@ -31,23 +31,54 @@ export const issueService = {
                 });
                 repository = repoData;
 
-                // Get issues for specific repository
-                const { data } = await octokit.rest.issues.listForRepo({
-                    owner: config.owner,
-                    repo: options.repo,
-                    state: options.state || 'open',
-                    labels: options.labels?.join(','),
-                    since: options.since,
-                    page: options.page || 1,
-                    per_page: options.per_page || 100,
-                    sort: options.sort || 'updated',
-                    direction: options.direction || 'desc',
-                });
-                issues = data;
+                if (options.state === 'all') {
+                    // Fetch both open and closed issues when state is 'all'
+                    const [openIssues, closedIssues] = await Promise.all([
+                        octokit.rest.issues.listForRepo({
+                            owner: config.owner,
+                            repo: options.repo,
+                            state: 'open',
+                            labels: options.labels?.join(','),
+                            since: options.since,
+                            page: options.page || 1,
+                            per_page: options.per_page || 100,
+                            sort: options.sort || 'updated',
+                            direction: options.direction || 'desc',
+                        }),
+                        octokit.rest.issues.listForRepo({
+                            owner: config.owner,
+                            repo: options.repo,
+                            state: 'closed',
+                            labels: options.labels?.join(','),
+                            since: options.since,
+                            page: options.page || 1,
+                            per_page: options.per_page || 100,
+                            sort: options.sort || 'updated',
+                            direction: options.direction || 'desc',
+                        }),
+                    ]);
+
+                    issues = [...openIssues.data, ...closedIssues.data];
+                } else {
+                    // Get issues for specific state
+                    const { data } = await octokit.rest.issues.listForRepo({
+                        owner: config.owner,
+                        repo: options.repo,
+                        state: options.state || 'open',
+                        labels: options.labels?.join(','),
+                        since: options.since,
+                        page: options.page || 1,
+                        per_page: options.per_page || 100,
+                        sort: options.sort || 'updated',
+                        direction: options.direction || 'desc',
+                    });
+                    issues = data;
+                }
+
                 debug.info(`Retrieved ${issues.length} issues for repository ${options.repo}`);
             } else {
-                // Get all issues for authenticated user
-                const { data: allIssues } = await octokit.rest.issues.listForAuthenticatedUser({
+                // Obtener issues de todos los repositorios
+                const { data } = await octokit.rest.issues.listForAuthenticatedUser({
                     filter: 'all',
                     state: options.state || 'open',
                     labels: options.labels?.join(','),
@@ -57,7 +88,8 @@ export const issueService = {
                     sort: options.sort || 'updated',
                     direction: options.direction || 'desc',
                 });
-                issues = allIssues;
+
+                issues = data;
                 debug.info(`Retrieved ${issues.length} issues from all repositories`);
             }
 
@@ -65,92 +97,22 @@ export const issueService = {
             const filteredIssues = issues.filter((issue) => !('pull_request' in issue));
             debug.info(`Filtered to ${filteredIssues.length} issues (excluding pull requests)`);
 
-            // Update database
-            await Promise.all(
-                filteredIssues.map(async (issue) => {
-                    const issueData = {
-                        githubId: issue.id,
-                        number: issue.number,
-                        title: issue.title,
-                        body: issue.body,
-                        state: issue.state,
-                        labels: issue.labels.map((label) => ({
-                            id: label.id,
-                            name: label.name,
-                            description: label.description,
-                            color: label.color,
-                        })),
-                        user: issue.user && {
-                            login: issue.user.login,
-                            id: issue.user.id,
-                            type: issue.user.type,
-                            avatar_url: issue.user.avatar_url,
-                        },
-                        assignee: issue.assignee && {
-                            login: issue.assignee.login,
-                            id: issue.assignee.id,
-                            type: issue.assignee.type,
-                            avatar_url: issue.assignee.avatar_url,
-                        },
-                        repository: options.repo
-                            ? {
-                                  id: repository.id,
-                                  name: repository.name,
-                                  full_name: repository.full_name,
-                                  private: repository.private,
-                              }
-                            : {
-                                  id: issue.repository.id,
-                                  name: issue.repository.name,
-                                  full_name: issue.repository.full_name,
-                                  private: issue.repository.private,
-                              },
-                        comments: issue.comments,
-                        created_at: new Date(issue.created_at),
-                        updated_at: new Date(issue.updated_at),
-                        closed_at: issue.closed_at ? new Date(issue.closed_at) : null,
-                        url: issue.url,
-                        html_url: issue.html_url,
-                        comments_url: issue.comments_url,
-                        locked: issue.locked,
-                        milestone: issue.milestone && {
-                            id: issue.milestone.id,
-                            number: issue.milestone.number,
-                            title: issue.milestone.title,
-                            description: issue.milestone.description,
-                            state: issue.milestone.state,
-                            due_on: new Date(issue.milestone.due_on),
-                        },
-                    };
-
-                    await IssueModel.findOneAndUpdate(
-                        {
-                            githubId: issue.id,
-                            'repository.name': options.repo || issue.repository.name,
-                        },
-                        issueData,
-                        { upsert: true, new: true }
-                    );
-                })
-            );
+            // Handle pagination
+            const startIndex = ((options.page || 1) - 1) * (options.per_page || 10);
+            const endIndex = startIndex + (options.per_page || 10);
+            const paginatedIssues = filteredIssues.slice(startIndex, endIndex);
 
             return {
                 success: true,
-                data: filteredIssues,
+                data: paginatedIssues,
                 total: filteredIssues.length,
                 pagination: {
                     page: options.page || 1,
-                    per_page: options.per_page || 100,
-                    hasMore: filteredIssues.length === (options.per_page || 100),
+                    per_page: options.per_page || 10,
+                    hasMore: endIndex < filteredIssues.length,
                 },
             };
         } catch (error: any) {
-            if (error.status === 404 && options.repo) {
-                return {
-                    success: false,
-                    error: `Repository ${options.repo} not found`,
-                };
-            }
             debug.error('Error fetching issues:', error);
             return {
                 success: false,
