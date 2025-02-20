@@ -19,29 +19,22 @@ export const issueService = {
         try {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
-
-            let issues: any[] = [];
-            let repository: any;
+            let allIssues: any[] = [];
 
             if (options.repo) {
-                // Get repository information first
-                const { data: repoData } = await octokit.rest.repos.get({
+                // Add repository information to issues
+                const repoInfo = await octokit.rest.repos.get({
                     owner: config.owner,
                     repo: options.repo,
                 });
-                repository = repoData;
 
                 if (options.state === 'all') {
-                    // Fetch both open and closed issues when state is 'all'
                     const [openIssues, closedIssues] = await Promise.all([
                         octokit.rest.issues.listForRepo({
                             owner: config.owner,
                             repo: options.repo,
                             state: 'open',
-                            labels: options.labels?.join(','),
-                            since: options.since,
-                            page: options.page || 1,
-                            per_page: options.per_page || 100,
+                            per_page: 100,
                             sort: options.sort || 'updated',
                             direction: options.direction || 'desc',
                         }),
@@ -49,57 +42,66 @@ export const issueService = {
                             owner: config.owner,
                             repo: options.repo,
                             state: 'closed',
-                            labels: options.labels?.join(','),
-                            since: options.since,
-                            page: options.page || 1,
-                            per_page: options.per_page || 100,
+                            per_page: 100,
                             sort: options.sort || 'updated',
                             direction: options.direction || 'desc',
                         }),
                     ]);
 
-                    issues = [...openIssues.data, ...closedIssues.data];
+                    // Combine and add repository information
+                    allIssues = [...openIssues.data, ...closedIssues.data].map((issue) => ({
+                        ...issue,
+                        repository: {
+                            id: repoInfo.data.id,
+                            name: repoInfo.data.name,
+                            full_name: repoInfo.data.full_name,
+                            private: repoInfo.data.private,
+                        },
+                    }));
                 } else {
-                    // Get issues for specific state
                     const { data } = await octokit.rest.issues.listForRepo({
                         owner: config.owner,
                         repo: options.repo,
                         state: options.state || 'open',
-                        labels: options.labels?.join(','),
-                        since: options.since,
-                        page: options.page || 1,
-                        per_page: options.per_page || 100,
+                        per_page: 100,
                         sort: options.sort || 'updated',
                         direction: options.direction || 'desc',
                     });
-                    issues = data;
-                }
 
-                debug.info(`Retrieved ${issues.length} issues for repository ${options.repo}`);
+                    // Add repository information
+                    allIssues = data.map((issue) => ({
+                        ...issue,
+                        repository: {
+                            id: repoInfo.data.id,
+                            name: repoInfo.data.name,
+                            full_name: repoInfo.data.full_name,
+                            private: repoInfo.data.private,
+                        },
+                    }));
+                }
             } else {
-                // Obtener issues de todos los repositorios
+                // Get all issues for authenticated user
                 const { data } = await octokit.rest.issues.listForAuthenticatedUser({
                     filter: 'all',
                     state: options.state || 'open',
                     labels: options.labels?.join(','),
                     since: options.since,
-                    page: options.page || 1,
-                    per_page: options.per_page || 100,
+                    per_page: 100,
                     sort: options.sort || 'updated',
                     direction: options.direction || 'desc',
                 });
-
-                issues = data;
-                debug.info(`Retrieved ${issues.length} issues from all repositories`);
+                allIssues = data;
             }
 
             // Filter out pull requests
-            const filteredIssues = issues.filter((issue) => !('pull_request' in issue));
+            const filteredIssues = allIssues.filter((issue) => !('pull_request' in issue));
             debug.info(`Filtered to ${filteredIssues.length} issues (excluding pull requests)`);
 
             // Handle pagination
-            const startIndex = ((options.page || 1) - 1) * (options.per_page || 10);
-            const endIndex = startIndex + (options.per_page || 10);
+            const page = options.page || 1;
+            const perPage = options.per_page || 10;
+            const startIndex = (page - 1) * perPage;
+            const endIndex = startIndex + perPage;
             const paginatedIssues = filteredIssues.slice(startIndex, endIndex);
 
             return {
@@ -107,8 +109,8 @@ export const issueService = {
                 data: paginatedIssues,
                 total: filteredIssues.length,
                 pagination: {
-                    page: options.page || 1,
-                    per_page: options.per_page || 10,
+                    page,
+                    per_page: perPage,
                     hasMore: endIndex < filteredIssues.length,
                 },
             };
