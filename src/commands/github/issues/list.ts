@@ -41,14 +41,17 @@ export const list = {
 
     async execute(interaction: ChatInputCommandInteraction) {
         try {
+            // Initial defer
             await interaction.deferReply();
+
+            // Initialize variables
             const state = interaction.options.getString('state') || 'open';
             const repo = interaction.options.getString('repo');
             let currentPage = 1;
             const perPage = 10;
 
             // Function to fetch and display issues
-            const displayIssues = async (page: number) => {
+            const fetchAndDisplayIssues = async (page: number) => {
                 const result = await issueService.getIssues({
                     state,
                     repo,
@@ -59,16 +62,14 @@ export const list = {
                 });
 
                 if (!result.success) {
-                    await interaction.editReply({
-                        embeds: [
-                            {
-                                title: 'Error',
-                                description: result.error || 'Failed to fetch issues',
-                                color: DiscordColors.ERROR,
-                            },
-                        ],
-                    });
-                    return null;
+                    return {
+                        success: false,
+                        embed: {
+                            title: 'Error',
+                            description: result.error || 'Failed to fetch issues',
+                            color: DiscordColors.ERROR,
+                        },
+                    };
                 }
 
                 const issues = result.data;
@@ -76,16 +77,14 @@ export const list = {
                 const totalPages = Math.ceil(total / perPage);
 
                 if (!issues?.length) {
-                    await interaction.editReply({
-                        embeds: [
-                            {
-                                title: 'No Issues Found',
-                                description: `No ${state} issues found${repo ? ` in ${repo}` : ''}`,
-                                color: DiscordColors.INFO,
-                            },
-                        ],
-                    });
-                    return null;
+                    return {
+                        success: false,
+                        embed: {
+                            title: 'No Issues Found',
+                            description: `No ${state} issues found${repo ? ` in ${repo}` : ''}`,
+                            color: DiscordColors.INFO,
+                        },
+                    };
                 }
 
                 const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -101,100 +100,88 @@ export const list = {
                         .setDisabled(page >= totalPages)
                 );
 
-                const embed = {
-                    title: `${state.charAt(0).toUpperCase() + state.slice(1)} Issues${repo ? ` - ${repo}` : ''}`,
-                    description: `Found ${total} issues`,
-                    fields: issues.map((issue) => ({
-                        name: `#${issue.number} - ${issue.title}`,
-                        value: `State: ${issue.state}\nRepo: ${issue.repository?.name || repo || 'Unknown'}\n[View on GitHub](${issue.html_url})`,
-                    })),
-                    color:
-                        state === 'open'
-                            ? DiscordColors.ISSUE_OPEN
-                            : state === 'closed'
-                              ? DiscordColors.ISSUE_CLOSED
-                              : DiscordColors.DEFAULT,
-                    footer: {
-                        text: `Page ${page} of ${totalPages}`,
+                return {
+                    success: true,
+                    embed: {
+                        title: `${state.charAt(0).toUpperCase() + state.slice(1)} Issues${repo ? ` - ${repo}` : ''}`,
+                        description: `Found ${total} issues`,
+                        fields: issues.map((issue) => ({
+                            name: `#${issue.number} - ${issue.title}`,
+                            value: `State: ${issue.state}\nRepo: ${issue.repository?.name || repo || 'Unknown'}\n[View on GitHub](${issue.html_url})`,
+                        })),
+                        color:
+                            state === 'open'
+                                ? DiscordColors.ISSUE_OPEN
+                                : state === 'closed'
+                                  ? DiscordColors.ISSUE_CLOSED
+                                  : DiscordColors.DEFAULT,
+                        footer: {
+                            text: `Page ${page} of ${totalPages}`,
+                        },
                     },
+                    buttons,
+                    totalPages,
                 };
-
-                return { embed, buttons, totalPages };
             };
 
             // Initial display
-            const initial = await displayIssues(currentPage);
-            if (!initial) return;
-
+            const initial = await fetchAndDisplayIssues(currentPage);
             const message = await interaction.editReply({
                 embeds: [initial.embed],
-                components: [initial.buttons],
+                components: initial.success ? [initial.buttons] : [],
             });
 
+            if (!initial.success) {
+                return;
+            }
+
             // Create button collector
-            const collector = message.createMessageComponentCollector({
-                componentType: ComponentType.Button,
-                time: 300000, // 5 minutes
+            const collector = message.createMessageComponentCollector<ComponentType.Button>({
+                time: 300000,
+                filter: (i) => i.user.id === interaction.user.id,
             });
 
             collector.on('collect', async (i) => {
                 try {
-                    if (i.user.id !== interaction.user.id) {
-                        await i.reply({
-                            content: 'You cannot use these buttons',
-                            ephemeral: true,
-                        });
-                        return;
-                    }
-
-                    // Update currentPage before deferring
-                    if (i.customId === 'prev') {
+                    // Update page number
+                    if (i.customId === 'prev' && currentPage > 1) {
                         currentPage--;
                     } else if (i.customId === 'next') {
                         currentPage++;
                     }
 
-                    // Defer the button interaction first
+                    // Acknowledge button interaction
                     await i.deferUpdate();
 
-                    const result = await displayIssues(currentPage);
-                    if (result) {
-                        await i.editReply({
-                            embeds: [result.embed],
-                            components: [result.buttons],
-                        });
-                    }
+                    // Get and display new page
+                    const result = await fetchAndDisplayIssues(currentPage);
+                    await i.editReply({
+                        embeds: [result.embed],
+                        components: result.success ? [result.buttons] : [],
+                    });
                 } catch (error) {
                     debug.error('Error handling button interaction:', error);
-                    if (!i.replied && !i.deferred) {
-                        await i.reply({
-                            content: 'An error occurred while handling the button interaction',
-                            ephemeral: true,
-                        });
-                    }
                 }
             });
 
-            collector.on('end', async () => {
-                try {
-                    await interaction.editReply({
-                        components: [],
-                    });
-                } catch (error) {
-                    debug.error('Error removing buttons:', error);
-                }
+            collector.on('end', () => {
+                interaction.editReply({ components: [] }).catch(() => {});
             });
         } catch (error) {
             debug.error('Error in list issues command:', error);
-            await interaction.editReply({
-                embeds: [
-                    {
-                        title: 'Error',
-                        description: 'Failed to fetch issues. Please try again later.',
-                        color: DiscordColors.ERROR,
-                    },
-                ],
-            });
+
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    embeds: [
+                        {
+                            title: 'Error',
+                            description: 'Failed to fetch issues. Please try again later.',
+                            color: DiscordColors.ERROR,
+                        },
+                    ],
+                    flags: 64,
+                });
+            }
         }
     },
 };
