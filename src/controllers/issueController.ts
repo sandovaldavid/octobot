@@ -6,7 +6,7 @@ import { IssueModel } from '@models/issue';
 import { debug } from '@utils/logger';
 import { CommandConfig } from '@config/commandConfig';
 import { RepositoryModel } from '@models/repository';
-import { isValidationError } from '@types/errors';
+import { isValidationError } from '@/types/error';
 
 export class IssueListController {
     private currentPage: number;
@@ -18,7 +18,7 @@ export class IssueListController {
         this.currentPage = 1;
         this.perPage = CommandConfig.pagination.perPage;
         this.state = interaction.options.getString('state') || 'open';
-        this.repo = interaction.options.getString('repo');
+        this.repo = interaction.options.getString('repo') ?? undefined;
     }
 
     async handlePagination(interaction: ButtonInteraction): Promise<void> {
@@ -60,6 +60,8 @@ interface QueryParams {
     repository?: string;
 }
 
+type SortOrder = 'asc' | 'desc';
+
 class IssueController {
     constructor() {
         this.getIssues = this.getIssues.bind(this);
@@ -87,7 +89,7 @@ class IssueController {
         }
         if (params.labels) {
             query['labels.name'] = {
-                $in: Array.isArray(params.labels) ? params.labels : params.labels.split(','),
+                $in: Array.isArray(params.labels) ? params.labels : (params.labels as string).split(','),
             };
         }
         if (params.repository) {
@@ -121,11 +123,17 @@ class IssueController {
             }
 
             const query = this.buildQuery(params);
-            const skip = (params.page - 1) * params.per_page;
-            const sortOption = { [params.sort]: params.direction === 'desc' ? -1 : 1 };
+            const skip = ((params.page ?? 1) - 1) * (params.per_page || 50);
+            const sortOption: [string, SortOrder][] = [
+                [params.sort as string, params.direction === 'desc' ? 'desc' : 'asc'],
+            ];
 
             const [issues, total] = await Promise.all([
-                IssueModel.find(query).sort(sortOption).skip(skip).limit(params.per_page).lean(),
+                IssueModel.find(query)
+                    .sort(sortOption)
+                    .skip(skip)
+                    .limit(params.per_page || 50)
+                    .lean(),
                 IssueModel.countDocuments(query),
             ]);
 
@@ -138,7 +146,7 @@ class IssueController {
                 pagination: {
                     page: params.page,
                     per_page: params.per_page,
-                    total_pages: Math.ceil(total / params.per_page),
+                    total_pages: Math.ceil(total / (params.per_page || 50)),
                     has_more: skip + issues.length < total,
                 },
             });
@@ -235,19 +243,19 @@ class IssueController {
         } catch (error) {
             debug.error('Error in syncIssues controller:', error);
 
-            if (error.name === 'ValidationError') {
+            if (error instanceof Error && error.name === 'ValidationError') {
                 return res.status(400).json({
                     success: false,
                     error: 'Invalid data format',
-                    details: error.message,
+                    details: (error as Error).message,
                 });
             }
 
-            if (error.code === 11000) {
+            if ((error as any).code === 11000) {
                 return res.status(409).json({
                     success: false,
                     error: 'Duplicate issue detected',
-                    details: error.message,
+                    details: (error as Error).message,
                 });
             }
 
@@ -294,7 +302,7 @@ class IssueController {
                 since: queryParams.since,
                 page: queryParams.page,
                 per_page: queryParams.per_page,
-                sort: queryParams.sort,
+                sort: queryParams.sort as 'created' | 'updated' | 'comments' | undefined,
                 direction: queryParams.direction,
             });
 
@@ -320,14 +328,14 @@ class IssueController {
                 pagination: {
                     page: queryParams.page,
                     per_page: queryParams.per_page,
-                    total_pages: Math.ceil((result.total || 0) / queryParams.per_page),
-                    has_more: result.pagination?.hasMore || false,
+                    total_pages: Math.ceil((result.total || 0) / (queryParams.per_page || 50)),
+                    has_more: result.data.length < (result.total ?? 0),
                 },
                 timestamp: new Date().toISOString(),
             });
         } catch (error) {
             debug.error('Error in getIssuesByRepository controller:', {
-                repository: repoName,
+                repository: req.params.repoName,
                 error: error instanceof Error ? error.message : 'Unknown error',
                 stack: error instanceof Error ? error.stack : undefined,
             });
