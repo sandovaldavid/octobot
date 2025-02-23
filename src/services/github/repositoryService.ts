@@ -1,7 +1,7 @@
 import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { RepositoryModel } from '@models/repository';
-import { GithubRepository, GithubApiResponse } from '@types/githubTypes';
+import { GithubRepository, GithubApiResponse } from '@/types/github';
 
 interface CreateRepositoryOptions {
     name: string;

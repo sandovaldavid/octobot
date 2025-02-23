@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { GithubIssue } from '@types/githubTypes';
+import { GithubIssue } from '@/types/github';
 
 const userSchema = new mongoose.Schema(
     {

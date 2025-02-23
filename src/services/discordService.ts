@@ -1,5 +1,5 @@
 import { TextChannel } from 'discord.js';
-import { DiscordNotification, GithubNotificationOptions, DiscordColors } from '@types/discordTypes';
+import { DiscordNotification, GithubNotificationOptions, DiscordColors } from '@/types/discord';
 import { discordClient } from '@config/discordConfig';
 import { debug } from '@utils/logger';
 

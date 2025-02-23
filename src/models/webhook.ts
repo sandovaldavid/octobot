@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { WEBHOOK_EVENTS, WebhookEventType } from '@types/webhookTypes';
+import { WEBHOOK_EVENTS, WebhookEventType } from '@/types/webhook';
 
 const webhookSchema = new mongoose.Schema({
     type: {

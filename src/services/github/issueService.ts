@@ -1,6 +1,6 @@
 import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
-import { GithubIssue, GithubApiResponse } from '@types/githubTypes';
+import { GithubIssue, GithubApiResponse } from '@/types/github';
 import { IssueModel } from '@models/issue';
 import { RepositoryModel } from '@models/repository';
 

@@ -3,7 +3,7 @@ import { RepositoryModel } from '@models/repository';
 import { discordService } from '@services/discordService';
 import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
-import { DiscordColors } from '@types/discordTypes';
+import { DiscordColors } from '@/types/discord';
 
 // Event handlers
 const handlers = {

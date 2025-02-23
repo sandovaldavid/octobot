@@ -1,7 +1,7 @@
 import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
-import { GithubApiResponse } from '@types/githubTypes';
-import { WEBHOOK_EVENTS, WebhookConfig, WebhookOptions } from '@types/webhookTypes';
+import { GithubApiResponse } from '@/types/github';
+import { WEBHOOK_EVENTS, WebhookConfig, WebhookOptions } from '@/types/webhook';
 import { RepositoryModel } from '@models/repository';
 
 export class WebhookService {

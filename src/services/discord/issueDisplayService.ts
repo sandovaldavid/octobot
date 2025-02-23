@@ -1,7 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
-import { IssueDisplayOptions, IssueDisplayResult } from '@types/discord/interfaces';
-import { GithubIssue } from '@types/github/interfaces';
-import { DiscordColors } from '@types/discordTypes';
+import { IssueDisplayOptions, IssueDisplayResult } from '@/interfaces/discord/issue';
+import { GithubIssue } from '@/types/github';
+import { DiscordColors } from '@/types/discord';
 import { PaginationButtons } from '@utils/buttonBuilder';
 import { RepositoryModel } from '@models/repository';
 import { issueService } from '@services/github/issueService';

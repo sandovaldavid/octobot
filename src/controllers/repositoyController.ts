@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { repositoryService } from '@services/github/repositoryService';
 import { RepositoryModel } from '@models/repository';
 import { debug } from '@utils/logger';
-import { GithubRepository, GithubApiResponse } from '@types/githubTypes';
+import { GithubRepository, GithubApiResponse } from '@/types/github';
 import { logger } from '../utils/logger';
 
 export const repositoryController = {
