@@ -1,4 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+
+type RepoSubcommands = 'watch' | 'unwatch' | 'sync' | 'check-webhook';
+type IssueSubcommands = 'list';
 import * as repoCommands from './repos';
 import * as issueCommands from './issues';
 import { debug } from '@utils/logger';
@@ -67,16 +70,16 @@ export const github = {
     async execute(interaction: ChatInputCommandInteraction) {
         const group = interaction.options.getSubcommandGroup();
         const subcommand = interaction.options.getSubcommand();
-
+                const handler = repoCommands.handlers[subcommand as RepoSubcommands];
         try {
             if (group === 'repo') {
-                const handler = repoCommands.handlers[subcommand];
+                const handler = repoCommands.handlers[subcommand as RepoSubcommands];
                 if (handler) {
                     await handler(interaction);
                     return;
                 }
             } else if (group === 'issues') {
-                const handler = issueCommands.handlers[subcommand];
+                const handler = issueCommands.handlers[subcommand as IssueSubcommands];
                 if (handler) {
                     await handler(interaction);
                     return;
