@@ -3,7 +3,7 @@ import { IssueDisplayService } from '@services/discord/issueDisplayService';
 import { CommandConfig } from '@config/commandConfig';
 import { debug } from '@utils/logger';
 import { createCommand } from '@utils/commandBuilder';
-import { DiscordColors } from '@types/discordTypes';
+import { DiscordColors } from '@/types/discord';
 
 export const list = createCommand({
     name: 'github',
