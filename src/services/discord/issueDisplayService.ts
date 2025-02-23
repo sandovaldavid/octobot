@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { IssueDisplayOptions, IssueDisplayResult } from '@/interfaces/discord/issue';
+import { IssueDisplayOptions, IssueDisplayResult } from '@interfaces/discord/interfaces';
 import { GithubIssue } from '@/types/github';
 import { DiscordColors } from '@/types/discord';
 import { PaginationButtons } from '@utils/buttonBuilder';
@@ -82,7 +82,7 @@ export class IssueDisplayService {
             .setFields(
                 issues.map((issue) => ({
                     name: `#${issue.number} - ${issue.title}`,
-                    value: `State: ${issue.state}\nRepo: ${issue.repository?.name || options.repo || 'Unknown'}\n[View on GitHub](${issue.html_url})`,
+                    value: `State: ${issue.state}\nRepo: ${options.repo || 'Unknown'}\n[View on GitHub](${issue.html_url})`,
                 }))
             )
             .setColor(
