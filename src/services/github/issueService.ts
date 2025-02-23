@@ -243,10 +243,10 @@ export const issueService = {
                 body: issueInfo.data.body,
                 state: issueInfo.data.state,
                 labels: issueInfo.data.labels.map((label) => ({
-                    id: label.id,
-                    name: label.name,
-                    description: label.description,
-                    color: label.color,
+                    id: typeof label === 'string' ? undefined : label.id,
+                    name: typeof label === 'string' ? label : label.name,
+                    description: typeof label === 'string' ? undefined : label.description,
+                    color: typeof label === 'string' ? undefined : label.color,
                 })),
                 user: issueInfo.data.user && {
                     login: issueInfo.data.user.login,
@@ -280,7 +280,7 @@ export const issueService = {
                     title: issueInfo.data.milestone.title,
                     description: issueInfo.data.milestone.description,
                     state: issueInfo.data.milestone.state,
-                    due_on: new Date(issueInfo.data.milestone.due_on),
+                    due_on: issueInfo.data.milestone.due_on ? new Date(issueInfo.data.milestone.due_on) : null,
                 },
             };
 
@@ -308,7 +308,7 @@ export const issueService = {
         } catch (error: any) {
             // Handle specific error cases
             if (error.status === 403) {
-                debug.warn(`Access denied to repository ${repoName || config.repo}`);
+                debug.warn(`Access denied to repository ${repoName}`);
                 return {
                     success: false,
                     error: 'Access denied. Please check your permissions.',
@@ -317,7 +317,7 @@ export const issueService = {
 
             debug.error('Error in getIssueById:', {
                 issueNumber,
-                repository: repoName || config.repo,
+                repository: repoName,
                 errorType: error.name,
                 errorMessage: error.message,
                 statusCode: error.status,
@@ -326,33 +326,6 @@ export const issueService = {
             return {
                 success: false,
                 error: error.message || 'Failed to fetch issue. Please try again later.',
-            };
-        }
-    },
-
-    async createIssue(title: string, body: string, labels?: string[]): Promise<GithubApiResponse<GithubIssue>> {
-        try {
-            const octokit = githubClient.getOctokit();
-            const config = githubClient.getConfig();
-
-            const { data } = await octokit.rest.issues.create({
-                owner: config.owner,
-                repo: config.repo,
-                title,
-                body,
-                labels,
-            });
-
-            debug.info(`Created new issue: ${title}`);
-            return {
-                success: true,
-                data,
-            };
-        } catch (error) {
-            debug.error('Error creating issue:', error);
-            return {
-                success: false,
-                error: error.message,
             };
         }
     },
@@ -414,10 +387,10 @@ export const issueService = {
                                     body: issue.body || '',
                                     state: issue.state,
                                     labels: issue.labels.map((label) => ({
-                                        id: label.id,
-                                        name: label.name,
-                                        description: label.description || '',
-                                        color: label.color,
+                                        id: typeof label === 'string' ? undefined : label.id,
+                                        name: typeof label === 'string' ? label : label.name,
+                                        description: typeof label === 'string' ? '' : label.description || '',
+                                        color: typeof label === 'string' ? undefined : label.color,
                                     })),
                                     user: issue.user && {
                                         login: issue.user.login,
@@ -432,7 +405,7 @@ export const issueService = {
                                         avatar_url: issue.assignee.avatar_url,
                                     },
                                     repository: {
-                                        id: repo.id,
+                                        id: repo._id,
                                         name: repo.name,
                                         full_name: `${config.owner}/${repo.name}`,
                                         private: false,
@@ -496,7 +469,7 @@ export const issueService = {
             debug.error('Error syncing issues:', error);
             return {
                 success: false,
-                error: error.message || 'Failed to sync issues',
+                error: (error as any).message || 'Failed to sync issues',
             };
         }
     },
@@ -527,7 +500,7 @@ export const issueService = {
                 return result;
             }
 
-            debug.info(`Retrieved ${result.data.length} issues for repository ${repoName}`);
+            debug.info(`Retrieved ${result.data?.length || 0} issues for repository ${repoName}`);
 
             return {
                 success: true,
