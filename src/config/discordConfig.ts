@@ -69,7 +69,9 @@ class DiscordClient {
             }
 
             debug.info(`Successfully connected to Discord as ${this.client.user?.tag}`);
-            debug.info(`Connected to channel: ${channel.name}`);
+            if (channel.isTextBased() && 'name' in channel) {
+                debug.info(`Connected to channel: ${channel.name}`);
+            }
 
             return true;
         } catch (error) {
