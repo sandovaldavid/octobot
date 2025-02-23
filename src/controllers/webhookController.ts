@@ -2,8 +2,6 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { handleGithubWebhook, handleRepositoryWebhook } from '@webhooks/handler';
 import { debug } from '@utils/logger';
-import { RepositoryModel } from '@models/repository';
-import { webhookService } from '@services/github/webhookService';
 
 export const webhookController = {
     async handleWebhook(req: Request, res: Response) {
