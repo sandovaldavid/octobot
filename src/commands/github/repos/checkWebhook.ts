@@ -16,7 +16,7 @@ export const checkWebhook = {
                 debug.warn(`Check failed for ${repoName}: ${result.error}`);
                 await interaction.editReply({
                     content: `❌ ${result.error}`,
-                    flags: 64,
+                    flags: 'SuppressEmbeds',
                 });
                 return;
             }
@@ -36,7 +36,7 @@ export const checkWebhook = {
 
             await interaction.editReply({
                 content: message,
-                flags: 64,
+                flags: 'SuppressEmbeds',
             });
         } catch (error) {
             debug.error('Error in check-webhook command:', error);
@@ -45,7 +45,7 @@ export const checkWebhook = {
                 if (interaction.deferred) {
                     await interaction.editReply({
                         content: '❌ Failed to check webhook status. Please try again later.',
-                        flags: 64,
+                        flags: 'SuppressEmbeds',
                     });
                 }
             } catch (replyError) {
