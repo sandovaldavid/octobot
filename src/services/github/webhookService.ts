@@ -49,7 +49,7 @@ export class WebhookService {
                     repo: repoName,
                 });
             } catch (error) {
-                if (error.status === 404) {
+                if ((error as any).status === 404) {
                     debug.error(`Repository '${repoName}' does not exist`);
                     return {
                         success: false,
@@ -92,7 +92,7 @@ export class WebhookService {
             debug.error('Error configuring webhook:', error);
             return {
                 success: false,
-                error: error.message || 'Unknown error occurred while configuring webhook',
+                error: error instanceof Error ? error.message : 'Unknown error occurred while configuring webhook',
             };
         }
     }
@@ -120,7 +120,7 @@ export class WebhookService {
             if (!existingWebhook) {
                 return {
                     success: true,
-                    message: 'No webhook found to remove',
+                    error: 'No webhook found to remove',
                 };
             }
 
@@ -137,7 +137,7 @@ export class WebhookService {
             debug.error('Error removing webhook:', error);
             return {
                 success: false,
-                error: error.message || 'Unknown error occurred while removing webhook',
+                error: error instanceof Error ? error.message : 'Unknown error occurred while removing webhook',
             };
         }
     }
@@ -165,7 +165,7 @@ export class WebhookService {
                     repo: repoName,
                 });
             } catch (error) {
-                if (error.status === 404) {
+                if ((error as any).status === 404) {
                     const errorMsg = `Repository '${repoName}' does not exist in ${config.owner}'s account`;
                     debug.warn(errorMsg);
                     return {
@@ -212,11 +212,11 @@ export class WebhookService {
                 data: {
                     exists: true,
                     active: webhook.active,
-                    channelId,
+                    channelId: channelId ?? undefined,
                 },
             };
         } catch (error) {
-            const errorMsg = error.message || 'Failed to check webhook status';
+            const errorMsg = error instanceof Error ? error.message : 'Failed to check webhook status';
             debug.error('Error checking webhook:', errorMsg);
             return {
                 success: false,
