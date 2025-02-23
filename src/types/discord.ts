@@ -1,4 +1,5 @@
-import { ChatInputCommandInteraction, Message, TextChannel, ClientEvents, GuildMember, Role } from 'discord.js';
+import { ChatInputCommandInteraction, ClientEvents } from 'discord.js';
+import { SlashCommandBuilder } from '@discordjs/builders';
 
 export interface DiscordCommand {
     data: SlashCommandBuilder;
@@ -12,18 +13,18 @@ export interface DiscordEvent {
 }
 
 export interface DiscordNotification {
-    type: 'success' | 'error' | 'info' | 'warning';
+    type: string;
     title: string;
     description: string;
-    fields?: {
+    color: number;
+    fields: Array<{ name: string; value: string }>;
+    timestamp: Date;
+    url?: string;
+    footer: { text: string };
+    author: {
         name: string;
-        value: string;
-        inline?: boolean;
-    }[];
-    color?: number;
-    timestamp?: Date;
-    footer?: string;
-    thumbnail?: string;
+        icon_url: string;
+    };
 }
 
 export interface DiscordWebhookPayload {
