@@ -37,7 +37,22 @@ export class DiscordService {
             }
 
             debug.info('Sending notification with data:', notification);
-            await channel.send({ embeds: [notification] });
+            const embed = {
+                title: notification.title,
+                description: notification.description,
+                color: notification.color,
+                fields: notification.fields,
+                timestamp: notification.timestamp.toISOString(),
+                author: {
+                    name: notification.author.name,
+                    icon_url: notification.author.icon_url,
+                },
+                url: notification.url,
+                footer: {
+                    text: notification.footer.text,
+                },
+            };
+            await channel.send({ embeds: [embed] });
             debug.info(`Notification sent successfully to channel ${channel.name}`);
         } catch (error) {
             debug.error('Error sending Discord notification:', error);
@@ -116,7 +131,7 @@ export class DiscordService {
             timestamp: new Date(),
             author: {
                 name: options.author.name,
-                icon_url: options.author.avatar,
+                icon_url: options.author.avatar || '',
             },
             url: options.url,
             footer: {
