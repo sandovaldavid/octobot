@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import { issueController } from '@controllers/issueController';
+import { getIssues, getIssuesByRepository, getIssueById, createIssue, syncIssues } from '@controllers/issueController';
 
 const router = Router();
 
-router.get('/', issueController.getIssues);
-router.get('/repository/:repoName', issueController.getIssuesByRepository);
-router.get('/:issueNumber', issueController.getIssueById);
-router.post('/', issueController.createIssue);
-router.post('/sync', issueController.syncIssues);
+router.get('/', getIssues);
+router.get('/repository/:repoName', getIssuesByRepository);
+router.get('/:issueNumber', getIssueById);
+router.post('/', createIssue);
+router.post('/sync', syncIssues);
 
 export default router;
