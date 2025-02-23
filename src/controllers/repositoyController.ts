@@ -3,7 +3,6 @@ import { repositoryService } from '@services/github/repositoryService';
 import { RepositoryModel } from '@models/repository';
 import { debug } from '@utils/logger';
 import { GithubRepository, GithubApiResponse } from '@/types/github';
-import { logger } from '../utils/logger';
 
 export const repositoryController = {
     async getAllRepositories(req: Request, res: Response) {
@@ -233,11 +232,15 @@ export const repositoryController = {
 
     async searchRepositories(req: Request, res: Response) {
         try {
-            const { query, language, sort = 'updated' } = req.query;
+            const {
+                query,
+                language,
+                sort = 'updated',
+            } = req.query as { query: string; language?: string; sort?: string };
             const repositories = await RepositoryModel.find({
                 $or: [{ name: { $regex: query, $options: 'i' } }, { description: { $regex: query, $options: 'i' } }],
                 ...(language && { language }),
-            }).sort({ [sort]: -1 });
+            }).sort({ [sort as string]: -1 });
 
             res.json({
                 success: true,
