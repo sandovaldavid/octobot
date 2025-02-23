@@ -27,6 +27,7 @@ export interface GithubIssue {
     number: number;
     title: string;
     state: 'open' | 'closed';
+    html_url: string;
     body: string;
     user: GithubOwner;
     labels: GithubLabel[];
