@@ -41,7 +41,7 @@ export const list = createCommand({
             await interaction.deferReply();
 
             const state = (interaction.options.getString('state') || 'open') as 'open' | 'closed' | 'all';
-            const repo = interaction.options.getString('repo');
+            const repo = interaction.options.getString('repo') ?? undefined;
             let currentPage = 1;
 
             const displayResult = await IssueDisplayService.fetchAndDisplay({
@@ -52,10 +52,11 @@ export const list = createCommand({
             });
 
             if (!displayResult.success) {
-                return await interaction.editReply({
+                await interaction.editReply({
                     embeds: [displayResult.embed],
                     components: [],
                 });
+                return;
             }
 
             const message = await interaction.editReply({
