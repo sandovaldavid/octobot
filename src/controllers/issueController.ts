@@ -8,47 +8,6 @@ import { CommandConfig } from '@config/commandConfig';
 import { RepositoryModel } from '@models/repository';
 import { isValidationError } from '@/types/error';
 
-export class IssueListController {
-    private currentPage: number;
-    private readonly perPage: number;
-    private readonly state: string;
-    private readonly repo?: string;
-
-    constructor(interaction: ChatInputCommandInteraction) {
-        this.currentPage = 1;
-        this.perPage = CommandConfig.pagination.perPage;
-        this.state = interaction.options.getString('state') || 'open';
-        this.repo = interaction.options.getString('repo') ?? undefined;
-    }
-
-    async handlePagination(interaction: ButtonInteraction): Promise<void> {
-        try {
-            await interaction.deferUpdate();
-
-            if (interaction.customId === 'prev' && this.currentPage > 1) {
-                this.currentPage--;
-            } else if (interaction.customId === 'next') {
-                this.currentPage++;
-            }
-
-            const result = await IssueDisplayService.fetchAndDisplay({
-                state: this.state as 'open' | 'closed' | 'all',
-                repo: this.repo,
-                page: this.currentPage,
-                perPage: this.perPage,
-            });
-
-            await interaction.editReply({
-                embeds: [result.embed],
-                components: result.buttons ? [result.buttons] : [],
-            });
-        } catch (error) {
-            debug.error('Error in pagination:', error);
-            throw error;
-        }
-    }
-}
-
 interface QueryParams {
     state?: 'open' | 'closed' | 'all';
     labels?: string[];
@@ -62,26 +21,15 @@ interface QueryParams {
 
 type SortOrder = 'asc' | 'desc';
 
-class IssueController {
-    constructor() {
-        this.getIssues = this.getIssues.bind(this);
-        this.getIssueById = this.getIssueById.bind(this);
-        this.createIssue = this.createIssue.bind(this);
-        this.syncIssues = this.syncIssues.bind(this);
-        this.getIssuesByRepository = this.getIssuesByRepository.bind(this);
-        this.parseQueryParams = this.parseQueryParams.bind(this);
-        this.validateQueryParams = this.validateQueryParams.bind(this);
-        this.buildQuery = this.buildQuery.bind(this);
-    }
-
-    private validateQueryParams(params: QueryParams): boolean {
+export const issueController = {
+    validateQueryParams: (params: QueryParams): boolean => {
         if (params.state && !['open', 'closed', 'all'].includes(params.state)) {
             return false;
         }
         return true;
-    }
+    },
 
-    private buildQuery(params: QueryParams): any {
+    buildQuery: (params: QueryParams): any => {
         const query: any = {};
 
         if (params.state !== 'all') {
@@ -100,9 +48,9 @@ class IssueController {
         }
 
         return query;
-    }
+    },
 
-    async getIssues(req: Request, res: Response) {
+    getIssues: async (req: Request, res: Response) => {
         try {
             const params: QueryParams = {
                 state: (req.query.state as 'open' | 'closed' | 'all') || 'all',
@@ -115,14 +63,14 @@ class IssueController {
                 repository: req.query.repository as string,
             };
 
-            if (!this.validateQueryParams(params)) {
+            if (!issueController.validateQueryParams(params)) {
                 return res.status(400).json({
                     success: false,
                     error: 'Invalid query parameters',
                 });
             }
 
-            const query = this.buildQuery(params);
+            const query = issueController.buildQuery(params);
             const skip = ((params.page ?? 1) - 1) * (params.per_page || 50);
             const sortOption: [string, SortOrder][] = [
                 [params.sort as string, params.direction === 'desc' ? 'desc' : 'asc'],
@@ -157,9 +105,9 @@ class IssueController {
                 error: 'Internal Server Error',
             });
         }
-    }
+    },
 
-    async getIssueById(req: Request, res: Response) {
+    getIssueById: async (req: Request, res: Response) => {
         try {
             const { issueNumber } = req.params;
             const { repo } = req.query;
@@ -185,9 +133,9 @@ class IssueController {
                 error: 'Internal Server Error',
             });
         }
-    }
+    },
 
-    async createIssue(req: Request, res: Response) {
+    createIssue: async (req: Request, res: Response) => {
         try {
             const { title, body, labels } = req.body;
             const issue = await issueService.createIssue(title, body, labels);
@@ -196,9 +144,9 @@ class IssueController {
             debug.error('Error in createIssue controller:', error);
             res.status(500).json({ error: 'Internal Server Error' });
         }
-    }
+    },
 
-    async syncIssues(req: Request, res: Response) {
+    syncIssues: async (req: Request, res: Response) => {
         try {
             debug.info('Starting issues synchronization');
 
@@ -265,9 +213,9 @@ class IssueController {
                 message: 'Failed to synchronize issues. Please try again later.',
             });
         }
-    }
+    },
 
-    async getIssuesByRepository(req: Request, res: Response) {
+    getIssuesByRepository: async (req: Request, res: Response) => {
         try {
             const { repoName } = req.params;
 
@@ -287,8 +235,8 @@ class IssueController {
                 });
             }
 
-            const queryParams = this.parseQueryParams(req.query);
-            if (!this.validateQueryParams(queryParams)) {
+            const queryParams = issueController.parseQueryParams(req.query);
+            if (!issueController.validateQueryParams(queryParams)) {
                 return res.status(400).json({
                     success: false,
                     error: 'Invalid query parameters',
@@ -354,10 +302,10 @@ class IssueController {
                 message: 'Failed to fetch repository issues. Please try again later.',
             });
         }
-    }
+    },
 
     // Helper method to parse and validate query parameters
-    parseQueryParams(query: any): QueryParams {
+    parseQueryParams: (query: any): QueryParams => {
         return {
             state: (query.state as 'open' | 'closed' | 'all') || 'all',
             labels: Array.isArray(query.labels) ? query.labels : query.labels?.split(','),
@@ -367,7 +315,5 @@ class IssueController {
             sort: (query.sort as 'created' | 'updated' | 'comments') || 'updated',
             direction: (query.direction as 'asc' | 'desc') || 'desc',
         };
-    }
-}
-
-export const issueController = new IssueController();
+    },
+};
