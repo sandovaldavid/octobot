@@ -36,7 +36,10 @@ export const repositoryService = {
             };
         } catch (error) {
             debug.error('Error connecting to GitHub:', error);
-            return { success: false, error: error.message };
+            if (error instanceof Error) {
+                return { success: false, error: (error as Error).message };
+            }
+            return { success: false, error: 'Unknown error' };
         }
     },
 
@@ -61,7 +64,7 @@ export const repositoryService = {
             };
         } catch (error) {
             debug.error('Error fetching repositories:', error);
-            return { success: false, error: error.message };
+            return { success: false, error: (error as Error).message };
         }
     },
 
@@ -117,11 +120,11 @@ export const repositoryService = {
             return {
                 success: true,
                 total: result.length,
-                data: result,
+                data: result.map(this.mapRepositoryData),
             };
         } catch (error) {
             debug.error('Error syncing repositories:', error);
-            return { success: false, error: error.message };
+            return { success: false, error: (error as Error).message };
         }
     },
 
@@ -130,12 +133,12 @@ export const repositoryService = {
             const repositories = await RepositoryModel.find().sort({ updatedAt: -1 });
             return {
                 success: true,
-                data: repositories,
+                data: repositories.map(this.mapRepositoryData),
                 total: repositories.length,
             };
         } catch (error) {
             debug.error('Error getting stored repositories:', error);
-            return { success: false, error: error.message };
+            return { success: false, error: (error as Error).message };
         }
     },
 
@@ -199,7 +202,7 @@ export const repositoryService = {
             };
         } catch (error) {
             debug.error('Error creating repository:', error);
-            return { success: false, error: error.message };
+            return { success: false, error: (error as Error).message };
         }
     },
 
@@ -256,7 +259,7 @@ export const repositoryService = {
             };
         } catch (error) {
             debug.error('Error updating repository:', error);
-            return { success: false, error: error.message };
+            return { success: false, error: (error as Error).message };
         }
     },
 
@@ -274,7 +277,7 @@ export const repositoryService = {
             return { success: true };
         } catch (error) {
             debug.error('GitHub API Error:', error);
-            return { success: false, error: error.message };
+            return { success: false, error: (error as Error).message };
         }
     },
 
@@ -334,8 +337,8 @@ export const repositoryService = {
                     recent: recentCommits.data.map((commit) => ({
                         sha: commit.sha.substring(0, 7),
                         message: commit.commit.message,
-                        author: commit.commit.author.name,
-                        date: commit.commit.author.date,
+                        author: commit.commit.author ? commit.commit.author.name : 'Unknown',
+                        date: commit.commit.author ? commit.commit.author.date : 'Unknown',
                         url: commit.html_url,
                     })),
                 },
@@ -361,7 +364,7 @@ export const repositoryService = {
             debug.error('Error getting repository stats:', error);
             return {
                 success: false,
-                error: error.message,
+                error: error instanceof Error ? error.message : 'Unknown error',
             };
         }
     },
@@ -387,7 +390,7 @@ export const repositoryService = {
             return { success: true };
         } catch (error) {
             debug.error('Error configuring webhook:', error);
-            return { success: false, error: error.message };
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
     },
 
