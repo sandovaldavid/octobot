@@ -73,6 +73,7 @@ export interface GithubWebhookPayload {
 
 export interface GithubApiResponse<T> {
     success: boolean;
-    data?: T;
+    data: T;
+    total?: number;
     error?: string;
 }
