@@ -74,7 +74,12 @@ export interface GithubWebhookPayload {
 
 export interface GithubApiResponse<T> {
     success: boolean;
-    data: T;
+    data?: T;
     total?: number;
     error?: string;
+    pagination?: {
+        page: number;
+        per_page: number;
+        hasMore: boolean;
+    };
 }
