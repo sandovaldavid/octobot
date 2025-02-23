@@ -313,3 +313,11 @@ const parseQueryParams = (query: any): QueryParams => {
         direction: (query.direction as 'asc' | 'desc') || 'desc',
     };
 };
+
+export const issueController = {
+    getIssues,
+    getIssueById,
+    createIssue,
+    syncIssues,
+    getIssuesByRepository,
+};
