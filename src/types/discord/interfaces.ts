@@ -1,5 +1,4 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
-import { GithubIssue } from '../github/interfaces';
 
 export interface IssueDisplayOptions {
     state: 'open' | 'closed' | 'all';
