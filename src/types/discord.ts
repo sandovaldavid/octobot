@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, ClientEvents } from 'discord.js';
+import { ChatInputCommandInteraction, Message, TextChannel, ClientEvents, GuildMember, } from 'discord.js';
 import { SlashCommandBuilder } from '@discordjs/builders';
 
 export interface DiscordCommand {
