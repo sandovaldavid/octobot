@@ -2,9 +2,9 @@ import { Request, Response } from 'express';
 import { issueService } from '@services/github/issueService';
 import { IssueModel } from '@models/issue';
 import { debug } from '@utils/logger';
-import { CommandConfig } from '@config/commandConfig';
 import { RepositoryModel } from '@models/repository';
 import { isValidationError } from '@/types/error';
+import { SyncResult } from '@/types/github';
 
 interface QueryParams {
     state?: 'open' | 'closed' | 'all';
@@ -132,16 +132,16 @@ export const getIssueById = async (req: Request, res: Response): Promise<void> =
     }
 };
 
-export const createIssue = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { title, body, labels } = req.body;
-        const issue = await issueService.createIssue(title, body, labels);
-        res.status(201).json(issue);
-    } catch (error) {
-        debug.error('Error in createIssue controller:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
+// export const createIssue = async (req: Request, res: Response): Promise<void> => {
+//     try {
+//         const { title, body, labels } = req.body;
+//         const issue = await issueService.createIssue(title, body, labels);
+//         res.status(201).json(issue);
+//     } catch (error) {
+//         debug.error('Error in createIssue controller:', error);
+//         res.status(500).json({ error: 'Internal Server Error' });
+//     }
+// };
 
 export const syncIssues = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -159,7 +159,7 @@ export const syncIssues = async (req: Request, res: Response): Promise<void> => 
 
         const syncResult = await issueService.syncIssues();
 
-        if (!syncResult.success) {
+        if (!syncResult.success || !syncResult.data) {
             debug.error('Failed to sync issues:', syncResult.error);
             res.status(400).json({
                 success: false,
@@ -167,7 +167,7 @@ export const syncIssues = async (req: Request, res: Response): Promise<void> => 
             });
         }
 
-        const { total, synced } = syncResult.data;
+        const { total, synced } = syncResult.data as SyncResult;
 
         debug.info('Sync completed:', {
             totalIssues: total,
@@ -259,7 +259,7 @@ export const getIssuesByRepository = async (req: Request, res: Response): Promis
             });
         }
 
-        debug.info(`Retrieved ${result.data.length} issues for repository ${repoName}`);
+        debug.info(`Retrieved ${result.data?.length ?? 0} issues for repository ${repoName}`);
 
         res.json({
             success: true,
@@ -274,7 +274,7 @@ export const getIssuesByRepository = async (req: Request, res: Response): Promis
                 page: queryParams.page,
                 per_page: queryParams.per_page,
                 total_pages: Math.ceil((result.total || 0) / (queryParams.per_page || 50)),
-                has_more: result.data.length < (result.total ?? 0),
+                has_more: (result.data?.length ?? 0) < (result.total ?? 0),
             },
             timestamp: new Date().toISOString(),
         });
@@ -317,7 +317,7 @@ const parseQueryParams = (query: any): QueryParams => {
 export const issueController = {
     getIssues,
     getIssueById,
-    createIssue,
+    // createIssue,
     syncIssues,
     getIssuesByRepository,
 };
