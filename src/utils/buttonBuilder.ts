@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { PaginationOptions } from '@/interfaces/discord/issue';
+import { PaginationOptions } from '@/interfaces/discord/interfaces';
 import { CommandConfig } from '@config/commandConfig';
 
 export class PaginationButtons {
