@@ -176,3 +176,8 @@ export interface Release {
         browser_download_url: string;
     }>;
 }
+
+export interface SyncResult {
+    total: number;
+    synced: number;
+}
