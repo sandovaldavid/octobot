@@ -85,6 +85,7 @@ client.once('ready', () => {
 
 // Single interactionCreate handler
 client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
     await commandRegistry.handleCommand(interaction);
 });
 
