@@ -6,7 +6,7 @@ const router = Router();
 router.get('/', issueController.getIssues);
 router.get('/repository/:repoName', issueController.getIssuesByRepository);
 router.get('/:issueNumber', issueController.getIssueById);
-router.post('/', issueController.createIssue);
+// router.post('/', issueController.createIssue);
 router.post('/sync', issueController.syncIssues);
 
 export default router;
