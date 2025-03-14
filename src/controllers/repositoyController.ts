@@ -2,11 +2,10 @@ import { Request, Response } from 'express';
 import { repositoryService } from '@services/github/repositoryService';
 import { RepositoryModel } from '@models/repository';
 import { debug } from '@utils/logger';
-import { GithubRepository, GithubApiResponse } from '@types/githubTypes';
-import { logger } from '../utils/logger';
+import { GithubRepository, GithubApiResponse } from '@/types/github';
 
 export const repositoryController = {
-    async getAllRepositories(req: Request, res: Response) {
+    async getAllRepositories(req: Request, res: Response): Promise<void> {
         try {
             const result: GithubApiResponse<GithubRepository[]> = await repositoryService.getAllRepositories();
             res.json(result);
@@ -16,7 +15,7 @@ export const repositoryController = {
         }
     },
 
-    async syncRepositories(req: Request, res: Response) {
+    async syncRepositories(req: Request, res: Response): Promise<void> {
         try {
             const result = await repositoryService.syncRepositories();
             res.json(result);
@@ -26,7 +25,7 @@ export const repositoryController = {
         }
     },
 
-    async getStoredRepositories(req: Request, res: Response) {
+    async getStoredRepositories(req: Request, res: Response): Promise<void> {
         try {
             const result = await repositoryService.getStoredRepositories();
             res.json(result);
@@ -36,7 +35,7 @@ export const repositoryController = {
         }
     },
 
-    async createRepository(req: Request, res: Response) {
+    async createRepository(req: Request, res: Response): Promise<void> {
         try {
             const {
                 name,
@@ -49,14 +48,14 @@ export const repositoryController = {
             } = req.body;
 
             if (!name) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     error: 'Repository name is required',
                 });
             }
 
             if (topics && !Array.isArray(topics)) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     error: 'Topics must be an array of strings',
                 });
@@ -83,7 +82,7 @@ export const repositoryController = {
         }
     },
 
-    async updateRepository(req: Request, res: Response) {
+    async updateRepository(req: Request, res: Response): Promise<void> {
         try {
             const { repoName } = req.params;
             const { name, description, private: isPrivate, topics, default_branch } = req.body;
@@ -107,14 +106,14 @@ export const repositoryController = {
         }
     },
 
-    async deleteRepository(req: Request, res: Response) {
+    async deleteRepository(req: Request, res: Response): Promise<void> {
         try {
             const { repoName } = req.params;
 
             const githubResult = await repositoryService.deleteRepository(repoName);
 
             if (!githubResult.success) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     error: githubResult.error,
                 });
@@ -125,32 +124,32 @@ export const repositoryController = {
                 debug.info(`Database: Deleted repository ${repoName}`);
             } catch (dbError) {
                 debug.error('Database Error:', dbError);
-                return res.status(500).json({
+                res.status(500).json({
                     success: false,
                     error: 'Repository deleted from GitHub but database update failed',
                 });
             }
 
-            return res.status(200).json({
+            res.status(200).json({
                 success: true,
                 message: `Repository ${repoName} successfully deleted`,
             });
         } catch (error) {
             debug.error('Controller Error:', error);
-            return res.status(500).json({
+            res.status(500).json({
                 success: false,
                 error: 'Internal Server Error',
             });
         }
     },
 
-    async getRepositoryById(req: Request, res: Response) {
+    async getRepositoryById(req: Request, res: Response): Promise<void> {
         try {
             const { repoId } = req.params;
             const repository = await RepositoryModel.findOne({ githubId: repoId });
 
             if (!repository) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     error: 'Repository not found',
                 });
@@ -166,13 +165,13 @@ export const repositoryController = {
         }
     },
 
-    async getRepositoryByName(req: Request, res: Response) {
+    async getRepositoryByName(req: Request, res: Response): Promise<void> {
         try {
             const { repoName } = req.params;
             const repository = await RepositoryModel.findOne({ name: repoName });
 
             if (!repository) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     error: 'Repository not found',
                 });
@@ -188,13 +187,13 @@ export const repositoryController = {
         }
     },
 
-    async getRepositoryStats(req: Request, res: Response) {
+    async getRepositoryStats(req: Request, res: Response): Promise<void> {
         try {
             const { repoName } = req.params;
             const result = await repositoryService.getRepositoryStats(repoName);
 
             if (!result.success) {
-                return res.status(400).json(result);
+                res.status(400).json(result);
             }
 
             res.json(result);
@@ -204,20 +203,20 @@ export const repositoryController = {
         }
     },
 
-    async toggleRepositoryVisibility(req: Request, res: Response) {
+    async toggleRepositoryVisibility(req: Request, res: Response): Promise<void> {
         try {
             const { repoName } = req.params;
             const repository = await RepositoryModel.findOne({ name: repoName });
 
             if (!repository) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     error: 'Repository not found',
                 });
             }
 
             const result = await repositoryService.updateRepository(repoName, {
-                private: !repository.isPrivate,
+                private: !repository?.isPrivate,
             });
 
             if (result.success) {
@@ -231,13 +230,17 @@ export const repositoryController = {
         }
     },
 
-    async searchRepositories(req: Request, res: Response) {
+    async searchRepositories(req: Request, res: Response): Promise<void> {
         try {
-            const { query, language, sort = 'updated' } = req.query;
+            const {
+                query,
+                language,
+                sort = 'updated',
+            } = req.query as { query: string; language?: string; sort?: string };
             const repositories = await RepositoryModel.find({
                 $or: [{ name: { $regex: query, $options: 'i' } }, { description: { $regex: query, $options: 'i' } }],
                 ...(language && { language }),
-            }).sort({ [sort]: -1 });
+            }).sort({ [sort as string]: -1 });
 
             res.json({
                 success: true,
@@ -250,13 +253,13 @@ export const repositoryController = {
         }
     },
 
-    async updateRepositoryTopics(req: Request, res: Response) {
+    async updateRepositoryTopics(req: Request, res: Response): Promise<void> {
         try {
             const { repoName } = req.params;
             const { topics } = req.body;
 
             if (!Array.isArray(topics)) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     error: 'Topics must be an array of strings',
                 });

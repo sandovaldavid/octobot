@@ -2,11 +2,9 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { handleGithubWebhook, handleRepositoryWebhook } from '@webhooks/handler';
 import { debug } from '@utils/logger';
-import { RepositoryModel } from '@models/repository';
-import { webhookService } from '@services/github/webhookService';
 
 export const webhookController = {
-    async handleWebhook(req: Request, res: Response) {
+    async handleWebhook(req: Request, res: Response): Promise<void> {
         try {
             const event = req.headers['x-github-event'] as string;
             const signature = req.headers['x-hub-signature-256'] as string;
@@ -18,7 +16,7 @@ export const webhookController = {
             const secret = process.env.GITHUB_WEBHOOK_SECRET;
             if (!secret) {
                 debug.error('GITHUB_WEBHOOK_SECRET not configured');
-                return res.status(500).json({
+                res.status(500).json({
                     success: false,
                     error: 'Webhook secret not configured',
                 });
@@ -27,34 +25,57 @@ export const webhookController = {
             // Skip signature verification for ping events during webhook setup
             if (event === 'ping') {
                 debug.info('Processing ping event - skipping signature verification');
-                return res.status(200).json({
+                res.status(200).json({
                     success: true,
                     message: 'Webhook ping received',
                 });
             }
 
             if (signature) {
-                // Calculate expected signature
-                const hmac = crypto.createHmac('sha256', secret);
-                hmac.update(rawBody);
-                const calculatedSignature = `sha256=${hmac.digest('hex')}`;
+                try {
+                    // Extract signature value without prefix
+                    const signatureValue = signature.replace('sha256=', '');
 
-                debug.info(`Calculated signature: ${calculatedSignature}`);
+                    // Calculate expected signature
+                    const hmac = crypto.createHmac('sha256', secret!);
+                    hmac.update(rawBody);
+                    const calculatedSignature = hmac.digest('hex');
 
-                // Verify signature
-                if (signature !== calculatedSignature) {
-                    debug.error('Invalid webhook signature');
-                    debug.error(`Expected: ${calculatedSignature}`);
-                    debug.error(`Received: ${signature}`);
-                    return res.status(401).json({
+                    // Use timing-safe comparison
+                    const isValid = crypto.timingSafeEqual(
+                        Buffer.from(signatureValue),
+                        Buffer.from(calculatedSignature)
+                    );
+
+                    if (!isValid) {
+                        debug.error('Invalid webhook signature', {
+                            expected: calculatedSignature,
+                            received: signatureValue,
+                        });
+                        res.status(401).json({
+                            success: false,
+                            error: 'Invalid webhook signature',
+                        });
+                    }
+
+                    debug.info('Webhook signature verified successfully');
+                } catch (error) {
+                    debug.error('Error verifying webhook signature:', error);
+                    res.status(401).json({
                         success: false,
-                        error: 'Invalid signature',
+                        error: 'Invalid signature format',
                     });
                 }
+            } else {
+                debug.warn('No signature provided in webhook request');
+                res.status(401).json({
+                    success: false,
+                    error: 'Missing signature header',
+                });
             }
 
             if (!event) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     error: 'No GitHub event specified',
                 });
@@ -75,7 +96,7 @@ export const webhookController = {
         }
     },
 
-    async testWebhook(req: Request, res: Response) {
+    async testWebhook(req: Request, res: Response): Promise<void> {
         try {
             const testPayload = {
                 repository: {
@@ -117,12 +138,12 @@ export const webhookController = {
         }
     },
 
-    async configureRepositoryWebhook(req: Request, res: Response) {
+    async configureRepositoryWebhook(req: Request, res: Response): Promise<void> {
         try {
             const { repoName } = req.params;
 
             if (!repoName) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     error: 'Repository name is required',
                 });

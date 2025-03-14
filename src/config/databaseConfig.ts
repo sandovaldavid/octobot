@@ -1,4 +1,3 @@
-import { logger } from '@utils/logger.ts';
 import mongoose from 'mongoose';
 import { debug, logger } from '@utils/logger';
 
@@ -30,7 +29,11 @@ export const connectDB = async (): Promise<void> => {
             logger.info('MongoDB reconnected');
         });
     } catch (error) {
-        logger.error(`MongoDB connection error: ${error.message}`);
+        if (error instanceof Error) {
+            logger.error(`MongoDB connection error: ${error.message}`);
+        } else {
+            logger.error('MongoDB connection error: Unknown error');
+        }
         process.exit(1);
     }
 };

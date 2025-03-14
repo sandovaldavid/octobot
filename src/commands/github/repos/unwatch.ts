@@ -12,10 +12,7 @@ export const unwatch = {
                 .setName('unwatch')
                 .setDescription('Stop watching a GitHub repository')
                 .addStringOption((option) =>
-                    option
-                        .setName('name')
-                        .setDescription('Name of the repository to unwatch')
-                        .setRequired(true)
+                    option.setName('name').setDescription('Name of the repository to unwatch').setRequired(true)
                 )
         ),
 

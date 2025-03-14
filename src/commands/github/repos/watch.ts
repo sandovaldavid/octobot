@@ -2,7 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { RepositoryModel } from '@models/repository';
 import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
-import { WEBHOOK_EVENTS } from '../../../types/webhookTypes';
+import { WEBHOOK_EVENTS } from '../../../types/webhook';
 
 export const watch = {
     data: new SlashCommandBuilder()

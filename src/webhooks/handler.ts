@@ -3,7 +3,8 @@ import { RepositoryModel } from '@models/repository';
 import { discordService } from '@services/discordService';
 import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
-import { DiscordColors } from '@types/discordTypes';
+import { DiscordColors } from '@/types/discord';
+import { Payload, Commit, IssuePayload, ReleasePayload, PullRequestPayload, Release } from '@/types/github';
 
 // Event handlers
 const handlers = {
@@ -21,7 +22,7 @@ const handlers = {
     // status: handleStatusEvent,
 };
 
-export const handleGithubWebhook = async (event: string, payload: any) => {
+export const handleGithubWebhook = async (event: string, payload: Payload) => {
     try {
         await WebhookModel.create({
             type: event,
@@ -52,7 +53,7 @@ export const handleGithubWebhook = async (event: string, payload: any) => {
     }
 };
 
-async function handlePushEvent(channelId: string, payload: any) {
+async function handlePushEvent(channelId: string, payload: Payload) {
     const notification = discordService.createGithubNotification({
         type: 'commit',
         action: 'pushed',
@@ -63,7 +64,7 @@ async function handlePushEvent(channelId: string, payload: any) {
             name: payload.pusher.name,
             avatar: payload.sender.avatar_url,
         },
-        fields: payload.commits.map((commit) => ({
+        fields: payload.commits.map((commit: Commit) => ({
             name: commit.id.substring(0, 7),
             value: commit.message,
         })),
@@ -73,7 +74,7 @@ async function handlePushEvent(channelId: string, payload: any) {
     await discordService.sendNotification(channelId, notification);
 }
 
-async function handlePullRequestEvent(channelId: string, payload: any) {
+async function handlePullRequestEvent(channelId: string, payload: PullRequestPayload) {
     const action = payload.action;
     const pr = payload.pull_request;
     const isMerged = action === 'closed' && pr.merged;
@@ -111,7 +112,7 @@ async function handlePullRequestEvent(channelId: string, payload: any) {
     await discordService.sendNotification(channelId, notification);
 }
 
-async function handleIssueEvent(channelId: string, payload: any) {
+async function handleIssueEvent(channelId: string, payload: IssuePayload) {
     const action = payload.action;
     const issue = payload.issue;
 
@@ -133,7 +134,7 @@ async function handleIssueEvent(channelId: string, payload: any) {
             },
             {
                 name: 'Labels',
-                value: issue.labels.map((label) => label.name).join(', ') || 'No labels',
+                value: issue.labels.map((label: { name: string }) => label.name).join(', ') || 'No labels',
                 inline: true,
             },
             {
@@ -148,19 +149,19 @@ async function handleIssueEvent(channelId: string, payload: any) {
     await discordService.sendNotification(channelId, notification);
 }
 
-async function handleReleaseEvent(channelId: string, payload: any) {
+async function handleReleaseEvent(channelId: string, payload: ReleasePayload) {
     const action = payload.action;
-    const release = payload.release;
+    const release: Release = payload.release;
 
     const notification = discordService.createGithubNotification({
         type: 'release',
         action: action,
         title: `New Release: ${release.tag_name}`,
-        description: release.body?.substring(0, 200) || 'No description provided',
+        description: 'No description provided',
         url: release.html_url,
         author: {
-            name: release.author.login,
-            avatar: release.author.avatar_url,
+            name: 'Unknown author',
+            avatar: '',
         },
         fields: [
             {

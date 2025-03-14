@@ -1,6 +1,6 @@
 import mongoose, { Document } from 'mongoose';
-import { GithubRepository } from '@types/githubTypes';
-import { WEBHOOK_EVENTS } from '@types/webhookTypes';
+import { GithubRepository } from '@/types/github';
+import { WEBHOOK_EVENTS } from '@/types/webhook';
 
 export interface IRepository extends Document, Omit<GithubRepository, 'id'> {
     githubId: number;
