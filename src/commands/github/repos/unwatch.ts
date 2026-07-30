@@ -1,21 +1,28 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { RepositoryModel } from '@models/repository';
 import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
+import { createCommand } from '@utils/commandBuilder';
 
-export const unwatch = {
-    data: new SlashCommandBuilder()
-        .setName('github')
-        .setDescription('GitHub repository commands')
-        .addSubcommand((subcommand) =>
-            subcommand
-                .setName('unwatch')
-                .setDescription('Stop watching a GitHub repository')
-                .addStringOption((option) =>
-                    option.setName('name').setDescription('Name of the repository to unwatch').setRequired(true)
-                )
-        ),
-
+export const unwatch = createCommand({
+    name: 'github',
+    description: 'GitHub commands',
+    subcommandGroup: {
+        name: 'repo',
+        description: 'Repository management commands',
+        subcommand: {
+            name: 'unwatch',
+            description: 'Stop watching a GitHub repository',
+            options: [
+                {
+                    name: 'name',
+                    description: 'Name of the repository to unwatch',
+                    type: 'string',
+                    required: true,
+                },
+            ],
+        },
+    },
     async execute(interaction: ChatInputCommandInteraction) {
         try {
             await interaction.deferReply();
@@ -25,7 +32,8 @@ export const unwatch = {
 
             const repository = await RepositoryModel.findOne({ name: repoName });
             if (!repository) {
-                return interaction.editReply(`❌ Repository \`${repoName}\` is not being watched`);
+                await interaction.editReply(`❌ Repository \`${repoName}\` is not being watched`);
+                return;
             }
 
             // Remove webhook from GitHub
@@ -56,4 +64,4 @@ export const unwatch = {
             }
         }
     },
-};
+});

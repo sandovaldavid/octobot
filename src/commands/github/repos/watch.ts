@@ -1,22 +1,29 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { RepositoryModel } from '@models/repository';
 import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
+import { createCommand } from '@utils/commandBuilder';
 import { WEBHOOK_EVENTS } from '../../../types/webhook';
 
-export const watch = {
-    data: new SlashCommandBuilder()
-        .setName('github')
-        .setDescription('GitHub repository commands')
-        .addSubcommand((subcommand) =>
-            subcommand
-                .setName('watch')
-                .setDescription('Watch a GitHub repository')
-                .addStringOption((option) =>
-                    option.setName('name').setDescription('Name of the repository to watch').setRequired(true)
-                )
-        ),
-
+export const watch = createCommand({
+    name: 'github',
+    description: 'GitHub commands',
+    subcommandGroup: {
+        name: 'repo',
+        description: 'Repository management commands',
+        subcommand: {
+            name: 'watch',
+            description: 'Watch a GitHub repository',
+            options: [
+                {
+                    name: 'name',
+                    description: 'Name of the repository to watch',
+                    type: 'string',
+                    required: true,
+                },
+            ],
+        },
+    },
     async execute(interaction: ChatInputCommandInteraction) {
         try {
             await interaction.deferReply();
@@ -33,7 +40,8 @@ export const watch = {
                       ? `❌ No permission to configure webhooks for \`${repoName}\`. Make sure you have admin access.`
                       : `❌ Failed to configure webhook: ${webhookResult.error}`;
 
-                return interaction.editReply(errorMessage);
+                await interaction.editReply(errorMessage);
+                return;
             }
 
             await RepositoryModel.findOneAndUpdate(
@@ -61,4 +69,4 @@ export const watch = {
             }
         }
     },
-};
+});

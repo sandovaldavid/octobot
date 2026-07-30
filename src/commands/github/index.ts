@@ -70,7 +70,7 @@ export const github = {
     async execute(interaction: ChatInputCommandInteraction) {
         const group = interaction.options.getSubcommandGroup();
         const subcommand = interaction.options.getSubcommand();
-                const handler = repoCommands.handlers[subcommand as RepoSubcommands];
+
         try {
             if (group === 'repo') {
                 const handler = repoCommands.handlers[subcommand as RepoSubcommands];

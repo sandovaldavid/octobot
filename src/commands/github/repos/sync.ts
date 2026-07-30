@@ -1,15 +1,19 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { repositoryService } from '@services/github/repositoryService';
 import { debug } from '@utils/logger';
+import { createCommand } from '@utils/commandBuilder';
 
-export const sync = {
-    data: new SlashCommandBuilder()
-        .setName('github')
-        .setDescription('GitHub repository commands')
-        .addSubcommand((subcommand) =>
-            subcommand.setName('sync').setDescription('Synchronize GitHub repositories with database')
-        ),
-
+export const sync = createCommand({
+    name: 'github',
+    description: 'GitHub commands',
+    subcommandGroup: {
+        name: 'repo',
+        description: 'Repository management commands',
+        subcommand: {
+            name: 'sync',
+            description: 'Synchronize GitHub repositories with database',
+        },
+    },
     async execute(interaction: ChatInputCommandInteraction) {
         const subcommand = interaction.options.getSubcommand();
 
@@ -25,7 +29,8 @@ export const sync = {
 
             if (!result.success) {
                 debug.error('Sync failed:', result.error);
-                return interaction.editReply('❌ Failed to sync repositories: ' + result.error);
+                await interaction.editReply('❌ Failed to sync repositories: ' + result.error);
+                return;
             }
 
             const totalRepos = result.total || 0;
@@ -40,4 +45,4 @@ export const sync = {
             await interaction.editReply('❌ Failed to sync repositories. Please try again later.');
         }
     },
-};
+});
