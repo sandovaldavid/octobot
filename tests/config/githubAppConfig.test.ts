@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'bun:test';
-import { getGitHubAppConfig, validateGitHubAppEnv } from '../../src/config/githubAppConfig';
+import { describe, expect, it, beforeEach } from 'bun:test';
+import { getGitHubAppConfig, resetGitHubAppConfig, validateGitHubAppEnv } from '../../src/config/githubAppConfig';
 
 describe('Config - GitHubAppConfig', () => {
+    beforeEach(() => {
+        resetGitHubAppConfig();
+    });
+
     const validEnv = {
         GITHUB_APP_ID: '123456',
         GITHUB_APP_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----',
@@ -75,6 +79,7 @@ describe('Config - GitHubAppConfig', () => {
             expect(config.clientId).toBe('client_id');
         } finally {
             process.env = origEnv;
+            resetGitHubAppConfig();
         }
     });
 });

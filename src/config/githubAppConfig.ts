@@ -46,3 +46,7 @@ export function getGitHubAppConfig(): GitHubAppConfig {
     }
     return cachedConfig;
 }
+
+export function resetGitHubAppConfig(): void {
+    cachedConfig = null;
+}
