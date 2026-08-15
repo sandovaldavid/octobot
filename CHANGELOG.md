@@ -1,5 +1,40 @@
 # Changelog
 
+## [2.0.0](https://github.com/sandovaldavid/octobot/compare/v1.0.0...v2.0.0) (2026-08-15)
+
+
+### Features
+
+* **auth:** introduce multi-tenant github app onboarding and /gh command surface ([#32](https://github.com/sandovaldavid/octobot/issues/32)) ([8b2e614](https://github.com/sandovaldavid/octobot/commit/8b2e6145bbec6a4ea8c5162901165ab270de0aa6))
+* **docker:** add octobot service to docker-compose.development.yml ([ab2e3fe](https://github.com/sandovaldavid/octobot/commit/ab2e3fef8acd885d127d5a3e02d9474382615631))
+* promote multi-tenant GitHub App architecture to main ([#32](https://github.com/sandovaldavid/octobot/issues/32)) ([4ffb655](https://github.com/sandovaldavid/octobot/commit/4ffb65581cc7a7ebc6baaec6a1a60b7da7cb033a))
+
+
+### Bug Fixes
+
+* **config:** wire GITHUB_APP_SLUG through githubAppConfig, envConfig, and onboarding controller ([1281f79](https://github.com/sandovaldavid/octobot/commit/1281f79282c0a77276db268e29be399bfda69ba5))
+* **discord:** use Events.ClientReady to eliminate discord.js deprecation warning ([382e3cd](https://github.com/sandovaldavid/octobot/commit/382e3cd3bd5e398deacbefc57e61c82b4cfb1eef))
+* **docs:** update mermaid diagram syntax for clarity and consistency ([7684a1e](https://github.com/sandovaldavid/octobot/commit/7684a1e1308be6d353aeb86cfb4cfd248397be18))
+* **pipeline:** process repositories_removed regardless of action in installation_repositories ([5590504](https://github.com/sandovaldavid/octobot/commit/55905048075b0e88bc74db99fe005854e9660fa3))
+
+
+### Code Refactoring
+
+* **di:** lazily resolve onboardingController and GitHubAppConfig in gh dispatcher ([a9e3189](https://github.com/sandovaldavid/octobot/commit/a9e318908ec3d079976efa560916b788dd7357c5))
+* **discord:** migrate interaction reply options from ephemeral to MessageFlags.Ephemeral ([e795f5d](https://github.com/sandovaldavid/octobot/commit/e795f5d461b640ca69192f9d09353faba0a189f4))
+
+
+### Documentation
+
+* **env:** add docker-compose infrastructure variables to .env.example ([c3c1c43](https://github.com/sandovaldavid/octobot/commit/c3c1c43c7f1c4d1e14a873a49ddb2fb9b29a70d9))
+* **readme:** clarify opaque nonce hashing wording in architecture diagram ([9f6929d](https://github.com/sandovaldavid/octobot/commit/9f6929d9a0ba05e301781cc43ff3fddfe25ce139))
+* **readme:** fix mermaid diagram syntax by quoting labels and escaping special characters ([54f339d](https://github.com/sandovaldavid/octobot/commit/54f339dd5e64c13c437dbda13822fbf93dd5c38a))
+
+
+### Miscellaneous
+
+* **release:** establish v2 release boundary ([#48](https://github.com/sandovaldavid/octobot/issues/48)) ([9649e7d](https://github.com/sandovaldavid/octobot/commit/9649e7dd858dd5f5a345e009177163f55ea6d6a9))
+
 ## 1.0.0 (2026-08-15)
 
 
