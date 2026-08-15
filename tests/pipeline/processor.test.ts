@@ -22,6 +22,28 @@ describe('Pipeline - Event Processor', () => {
         expect(result.error).toBeDefined();
     });
 
+    it('debe retornar ignored_policy cuando el evento es filtrado por la política de notificaciones', async () => {
+        const delivery: VerifiedGithubDelivery = {
+            deliveryId: 'sync-delivery-1',
+            eventName: 'pull_request',
+            receivedAt: new Date(),
+            payload: {
+                action: 'synchronize',
+                repository: { full_name: 'sandovaldavid/octobot' },
+                pull_request: {
+                    number: 42,
+                    title: 'WIP Commit',
+                    head: { ref: 'feature/pr' },
+                    base: { ref: 'develop' },
+                },
+            },
+        };
+
+        const result = await EventProcessor.process(delivery);
+        expect(result.outcome).toBe('ignored_policy');
+        expect(result.attempted).toBe(0);
+    });
+
     it('debe retornar ignored_ping para eventos de ping', async () => {
         const delivery: VerifiedGithubDelivery = {
             deliveryId: 'ping-delivery-1',

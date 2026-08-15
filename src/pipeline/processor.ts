@@ -1,5 +1,6 @@
 import { VerifiedGithubDelivery, ProcessingResult, ProcessingOutcome } from './types';
 import { normalizeGithubEvent } from './normalizer';
+import { NotificationPolicy } from './policy';
 import { SubscriptionRouter } from './router';
 import { NotificationFactory } from './formatter';
 import { DiscordDelivery } from './delivery';
@@ -72,7 +73,27 @@ export class EventProcessor {
 
             const repositoryFullName = normalizedEvent.repositoryFullName;
 
-            // 4. Resolve Subscriptions
+            // 4. Apply Notification Policy (Filter Noise)
+            const policyDecision = NotificationPolicy.shouldNotify(normalizedEvent);
+            if (!policyDecision.notify) {
+                const durationMs = Date.now() - startTime;
+                const result: ProcessingResult = {
+                    deliveryId,
+                    eventName,
+                    repositoryFullName,
+                    outcome: 'ignored_policy',
+                    matchedSubscriptions: 0,
+                    attempted: 0,
+                    succeeded: 0,
+                    failed: 0,
+                    durationMs,
+                    error: policyDecision.reason,
+                };
+                this.logOutcome(result);
+                return result;
+            }
+
+            // 5. Resolve Subscriptions
             const { matchedSubscriptionsCount, targetChannelIds } =
                 await SubscriptionRouter.resolveTargetChannels(normalizedEvent);
 
@@ -110,7 +131,7 @@ export class EventProcessor {
                 return result;
             }
 
-            // 5. Format Notification
+            // 6. Format Notification
             const notification = NotificationFactory.createNotification(normalizedEvent);
             if (!notification) {
                 const durationMs = Date.now() - startTime;
@@ -129,7 +150,7 @@ export class EventProcessor {
                 return result;
             }
 
-            // 6. Deliver to Discord
+            // 7. Deliver to Discord
             const { attempted, succeeded, failed } = await DiscordDelivery.deliver(targetChannelIds, notification);
 
             const outcome: ProcessingOutcome =

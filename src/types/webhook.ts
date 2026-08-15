@@ -1,7 +1,15 @@
 /**
  * Events currently supported and processed by OctoBot V1.
  */
-export const SUPPORTED_WEBHOOK_EVENTS = ['push', 'pull_request', 'issues', 'release', 'create', 'delete'] as const;
+export const SUPPORTED_WEBHOOK_EVENTS = [
+    'push',
+    'pull_request',
+    'pull_request_review',
+    'issues',
+    'release',
+    'create',
+    'delete',
+] as const;
 
 export type SupportedWebhookEvent = (typeof SUPPORTED_WEBHOOK_EVENTS)[number];
 export type SubscriptionEvent = SupportedWebhookEvent;

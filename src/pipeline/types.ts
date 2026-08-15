@@ -11,6 +11,7 @@ export type ProcessingOutcome =
     | 'ignored_unsupported_event'
     | 'ignored_no_subscription'
     | 'ignored_subscription_filter'
+    | 'ignored_policy'
     | 'invalid_payload'
     | 'partial_delivery'
     | 'failed';
@@ -36,6 +37,10 @@ export type PullRequestAction =
     | 'merged'
     | 'ready_for_review'
     | 'review_requested';
+
+export type PullRequestReviewAction = 'submitted' | 'edited' | 'dismissed';
+
+export type ReviewState = 'approved' | 'changes_requested' | 'commented' | 'dismissed';
 
 export type IssueAction = 'opened' | 'closed' | 'reopened' | 'labeled' | 'unlabeled' | 'assigned' | 'unassigned';
 
@@ -70,6 +75,27 @@ export interface NormalizedPullRequestEvent {
     additions: number;
     deletions: number;
     merged: boolean;
+    draft: boolean;
+    changedFiles?: number;
+    requestedReviewers: string[];
+    mergedBy?: string;
+}
+
+export interface NormalizedPullRequestReviewEvent {
+    type: 'pull_request_review';
+    repositoryFullName: string;
+    action: PullRequestReviewAction;
+    reviewState: ReviewState;
+    prNumber: number;
+    prTitle: string;
+    prHtmlUrl: string;
+    prHeadRef: string;
+    prBaseRef: string;
+    reviewerLogin: string;
+    reviewerAvatar: string;
+    body?: string;
+    htmlUrl: string;
+    submittedAt?: string;
 }
 
 export interface NormalizedIssueEvent {
@@ -136,6 +162,7 @@ export interface NormalizedUnsupportedEvent {
 export type NormalizedGithubEvent =
     | NormalizedPushEvent
     | NormalizedPullRequestEvent
+    | NormalizedPullRequestReviewEvent
     | NormalizedIssueEvent
     | NormalizedReleaseEvent
     | NormalizedBranchCreatedEvent
