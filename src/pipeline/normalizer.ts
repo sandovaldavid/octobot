@@ -3,6 +3,7 @@ import {
     NormalizationResult,
     NormalizedPushEvent,
     NormalizedPullRequestEvent,
+    NormalizedPullRequestReviewEvent,
     NormalizedIssueEvent,
     NormalizedReleaseEvent,
     NormalizedBranchCreatedEvent,
@@ -10,6 +11,8 @@ import {
     NormalizedPingEvent,
     NormalizedUnsupportedEvent,
     PullRequestAction,
+    PullRequestReviewAction,
+    ReviewState,
     IssueAction,
     ReleaseAction,
 } from './types';
@@ -22,6 +25,10 @@ const VALID_PR_ACTIONS: PullRequestAction[] = [
     'ready_for_review',
     'review_requested',
 ];
+
+const VALID_PR_REVIEW_ACTIONS: PullRequestReviewAction[] = ['submitted', 'edited', 'dismissed'];
+
+const VALID_REVIEW_STATES: ReviewState[] = ['approved', 'changes_requested', 'commented', 'dismissed'];
 
 const VALID_ISSUE_ACTIONS: IssueAction[] = [
     'opened',
@@ -160,6 +167,16 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 };
             }
 
+            const requestedReviewers: string[] = [];
+            if (Array.isArray(pr.requested_reviewers)) {
+                for (const r of pr.requested_reviewers) {
+                    if (r?.login) requestedReviewers.push(r.login);
+                }
+            }
+            if (p.requested_reviewer?.login && !requestedReviewers.includes(p.requested_reviewer.login)) {
+                requestedReviewers.push(p.requested_reviewer.login);
+            }
+
             return {
                 success: true,
                 event: {
@@ -177,7 +194,80 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                     additions: Number(pr.additions || 0),
                     deletions: Number(pr.deletions || 0),
                     merged: Boolean(pr.merged),
+                    draft: Boolean(pr.draft),
+                    changedFiles: typeof pr.changed_files === 'number' ? pr.changed_files : undefined,
+                    requestedReviewers,
+                    mergedBy: pr.merged_by?.login || (isMerged ? p.sender?.login : undefined),
                 } as NormalizedPullRequestEvent,
+            };
+        }
+
+        case 'pull_request_review': {
+            const review = p.review;
+            const pr = p.pull_request;
+
+            if (!review || typeof review !== 'object') {
+                return {
+                    success: false,
+                    reason: 'Missing review object in pull_request_review event',
+                    repositoryFullName: repoFullName,
+                };
+            }
+
+            if (!pr || typeof pr !== 'object') {
+                return {
+                    success: false,
+                    reason: 'Missing pull_request object in pull_request_review event',
+                    repositoryFullName: repoFullName,
+                };
+            }
+
+            const rawAction = String(p.action || '');
+            if (!VALID_PR_REVIEW_ACTIONS.includes(rawAction as PullRequestReviewAction)) {
+                return {
+                    success: false,
+                    reason: `Unsupported pull_request_review action: "${rawAction}"`,
+                    repositoryFullName: repoFullName,
+                };
+            }
+
+            const rawState = String(review.state || '').toLowerCase();
+            if (!VALID_REVIEW_STATES.includes(rawState as ReviewState)) {
+                return {
+                    success: false,
+                    reason: `Unsupported review state: "${rawState}"`,
+                    repositoryFullName: repoFullName,
+                };
+            }
+
+            const prNumber = Number(pr.number || p.number);
+            const prTitle = typeof pr.title === 'string' ? pr.title.trim() : '';
+            if (!prNumber || prNumber <= 0 || !prTitle) {
+                return {
+                    success: false,
+                    reason: 'Missing or invalid pull_request details in pull_request_review event',
+                    repositoryFullName: repoFullName,
+                };
+            }
+
+            return {
+                success: true,
+                event: {
+                    type: 'pull_request_review',
+                    repositoryFullName: repoFullName,
+                    action: rawAction as PullRequestReviewAction,
+                    reviewState: rawState as ReviewState,
+                    prNumber,
+                    prTitle,
+                    prHtmlUrl: String(pr.html_url || ''),
+                    prHeadRef: String(pr.head?.ref || ''),
+                    prBaseRef: String(pr.base?.ref || ''),
+                    reviewerLogin: String(review.user?.login || p.sender?.login || 'ghost'),
+                    reviewerAvatar: String(review.user?.avatar_url || p.sender?.avatar_url || ''),
+                    body: typeof review.body === 'string' ? review.body : undefined,
+                    htmlUrl: String(review.html_url || pr.html_url || ''),
+                    submittedAt: typeof review.submitted_at === 'string' ? review.submitted_at : undefined,
+                } as NormalizedPullRequestReviewEvent,
             };
         }
 

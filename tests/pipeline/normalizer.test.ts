@@ -63,6 +63,57 @@ describe('Pipeline - Event Normalizer', () => {
         }
     });
 
+    it('debe normalizar eventos pull_request_review correctamente (approved)', () => {
+        const delivery: VerifiedGithubDelivery = {
+            deliveryId: 'del-review-1',
+            eventName: 'pull_request_review',
+            receivedAt: new Date(),
+            payload: {
+                action: 'submitted',
+                repository: { full_name: 'sandovaldavid/octobot' },
+                review: {
+                    state: 'APPROVED',
+                    body: 'LGTM!',
+                    html_url: 'https://github.com/sandovaldavid/octobot/pull/42#pullrequestreview-1',
+                    user: { login: 'lead-reviewer', avatar_url: 'https://avatar.url' },
+                },
+                pull_request: {
+                    number: 42,
+                    title: 'Refactor Pipeline',
+                    html_url: 'https://github.com/sandovaldavid/octobot/pull/42',
+                    head: { ref: 'feature/pipeline' },
+                    base: { ref: 'develop' },
+                },
+            },
+        };
+
+        const result = normalizeGithubEvent(delivery);
+        expect(result.success).toBe(true);
+        if (result.success && result.event.type === 'pull_request_review') {
+            expect(result.event.action).toBe('submitted');
+            expect(result.event.reviewState).toBe('approved');
+            expect(result.event.prNumber).toBe(42);
+            expect(result.event.reviewerLogin).toBe('lead-reviewer');
+            expect(result.event.body).toBe('LGTM!');
+        }
+    });
+
+    it('debe rechazar eventos pull_request_review malformados sin review o pull_request', () => {
+        const delivery: VerifiedGithubDelivery = {
+            deliveryId: 'del-bad-review',
+            eventName: 'pull_request_review',
+            receivedAt: new Date(),
+            payload: {
+                action: 'submitted',
+                repository: { full_name: 'sandovaldavid/octobot' },
+                // missing review and pull_request
+            },
+        };
+
+        const result = normalizeGithubEvent(delivery);
+        expect(result.success).toBe(false);
+    });
+
     it('debe rechazar eventos pull_request malformados sin number o title', () => {
         const delivery: VerifiedGithubDelivery = {
             deliveryId: 'del-pr-invalid',
@@ -72,7 +123,6 @@ describe('Pipeline - Event Normalizer', () => {
                 action: 'opened',
                 repository: { full_name: 'sandovaldavid/octobot' },
                 pull_request: {
-                    // missing number and title
                     head: { ref: 'feat' },
                     base: { ref: 'develop' },
                 },
@@ -124,7 +174,7 @@ describe('Pipeline - Event Normalizer', () => {
             receivedAt: new Date(),
             payload: {
                 action: 'opened',
-                repository: { name: 'octobot' }, // missing owner prefix
+                repository: { name: 'octobot' },
                 issue: { number: 1, title: 'Test' },
             },
         };
