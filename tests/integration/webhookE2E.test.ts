@@ -783,6 +783,15 @@ describe('Integration - End-to-End Webhook Pipeline', () => {
             expect(data.timestamp).toBeDefined();
         });
 
+        it('debe responder 200 OK en /ready cuando Discord y MongoDB están operativos', async () => {
+            const res = await fetch(`${baseUrl}/ready`);
+            expect(res.status).toBe(200);
+            const data: any = await res.json();
+            expect(data.status).toBe('READY');
+            expect(data.checks.discord).toBe('UP');
+            expect(data.checks.database).toBe('UP');
+        });
+
         it('debe procesar y entregar eventos de issues abiertos', async () => {
             memorySubscriptions.push({
                 repositoryFullName: 'sandovaldavid/octobot',
@@ -813,6 +822,36 @@ describe('Integration - End-to-End Webhook Pipeline', () => {
             expect(deliveredNotifications[0].notification.title).toContain('Issue #99 opened');
         });
 
+        it('debe filtrar acciones ruidosas de issues (e.g. labeled) sin notificar a Discord', async () => {
+            memorySubscriptions.push({
+                repositoryFullName: 'sandovaldavid/octobot',
+                channelId: 'channel-issues',
+                events: ['issues'],
+                active: true,
+            });
+
+            const res = await sendWebhook({
+                event: 'issues',
+                deliveryId: 'issue-labeled-1',
+                payload: {
+                    action: 'labeled',
+                    repository: { full_name: 'sandovaldavid/octobot' },
+                    issue: {
+                        number: 99,
+                        title: 'Test Bug',
+                        body: 'Bug description',
+                        state: 'open',
+                        labels: [{ name: 'bug' }],
+                        user: { login: 'tester' },
+                    },
+                },
+            });
+
+            expect(res.status).toBe(200);
+            expect(res.body.outcome).toBe('ignored_policy');
+            expect(deliveredNotifications.length).toBe(0);
+        });
+
         it('debe procesar y entregar eventos de release publicado', async () => {
             memorySubscriptions.push({
                 repositoryFullName: 'sandovaldavid/octobot',
@@ -841,6 +880,34 @@ describe('Integration - End-to-End Webhook Pipeline', () => {
             expect(deliveredNotifications[0].notification.title).toContain(
                 'New Release in sandovaldavid/octobot: v1.0.0'
             );
+        });
+
+        it('debe filtrar eventos de release no publicados (e.g. edited, created) sin notificar a Discord', async () => {
+            memorySubscriptions.push({
+                repositoryFullName: 'sandovaldavid/octobot',
+                channelId: 'channel-releases',
+                events: ['release'],
+                active: true,
+            });
+
+            const res = await sendWebhook({
+                event: 'release',
+                deliveryId: 'rel-edit-1',
+                payload: {
+                    action: 'edited',
+                    repository: { full_name: 'sandovaldavid/octobot' },
+                    release: {
+                        tag_name: 'v1.0.0',
+                        name: 'V1 Draft',
+                        author: { login: 'release-manager' },
+                        prerelease: false,
+                    },
+                },
+            });
+
+            expect(res.status).toBe(200);
+            expect(res.body.outcome).toBe('ignored_policy');
+            expect(deliveredNotifications.length).toBe(0);
         });
     });
 });

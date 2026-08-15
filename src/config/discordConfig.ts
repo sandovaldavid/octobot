@@ -3,7 +3,7 @@ import { debug } from '@utils/logger';
 
 interface DiscordConfig {
     token: string;
-    channelId: string;
+    channelId?: string;
     guildId?: string;
     clientId?: string;
 }
@@ -65,16 +65,18 @@ class DiscordClient {
                 await this.client.login(this.config.token);
             }
 
-            const channel = await this.client.channels.fetch(this.config.channelId);
-            if (!channel || !channel.isTextBased()) {
-                throw new Error(`Channel ${this.config.channelId} not found or is not a text channel`);
+            if (this.config.channelId) {
+                try {
+                    const channel = await this.client.channels.fetch(this.config.channelId);
+                    if (channel?.isTextBased() && 'name' in channel) {
+                        debug.info(`Verified default fallback channel: ${channel.name}`);
+                    }
+                } catch (channelErr) {
+                    debug.warn(`Default channel verification skipped or channel not found: ${channelErr}`);
+                }
             }
 
-            debug.info(`Successfully connected to Discord as ${this.client.user?.tag}`);
-            if (channel.isTextBased() && 'name' in channel) {
-                debug.info(`Connected to channel: ${channel.name}`);
-            }
-
+            debug.info(`Successfully connected to Discord as ${this.client.user?.tag || 'Bot'}`);
             return true;
         } catch (error) {
             debug.error('Discord connection test failed:', error);
@@ -85,7 +87,7 @@ class DiscordClient {
 
 const defaultConfig: DiscordConfig = {
     token: process.env.DISCORD_TOKEN || '',
-    channelId: process.env.DISCORD_CHANNEL_ID || '',
+    channelId: process.env.DISCORD_CHANNEL_ID,
     guildId: process.env.DISCORD_GUILD_ID,
     clientId: process.env.DISCORD_CLIENT_ID,
 };

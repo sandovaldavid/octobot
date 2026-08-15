@@ -5,6 +5,8 @@ import {
     NormalizedPullRequestReviewEvent,
     NormalizedPushEvent,
     NormalizedWorkflowRunEvent,
+    NormalizedIssueEvent,
+    NormalizedReleaseEvent,
 } from '../../src/pipeline/types';
 
 describe('Pipeline - Notification Policy', () => {
@@ -131,7 +133,50 @@ describe('Pipeline - Notification Policy', () => {
         );
     });
 
-    it('debe aprobar eventos push, issues, release, create, delete', () => {
+    it('debe aprobar acciones accionables de issues (opened, closed, assigned, reopened) y filtrar ruido', () => {
+        const baseIssue: NormalizedIssueEvent = {
+            type: 'issues',
+            repositoryFullName: 'sandovaldavid/octobot',
+            action: 'opened',
+            issueNumber: 99,
+            title: 'Bug',
+            body: '',
+            state: 'open',
+            htmlUrl: 'https://github.com',
+            userLogin: 'dev',
+            userAvatar: '',
+            labels: [],
+        };
+
+        expect(NotificationPolicy.shouldNotify({ ...baseIssue, action: 'opened' }).notify).toBe(true);
+        expect(NotificationPolicy.shouldNotify({ ...baseIssue, action: 'closed' }).notify).toBe(true);
+        expect(NotificationPolicy.shouldNotify({ ...baseIssue, action: 'assigned' }).notify).toBe(true);
+        expect(NotificationPolicy.shouldNotify({ ...baseIssue, action: 'reopened' }).notify).toBe(true);
+        expect(NotificationPolicy.shouldNotify({ ...baseIssue, action: 'labeled' }).notify).toBe(false);
+        expect(NotificationPolicy.shouldNotify({ ...baseIssue, action: 'edited' }).notify).toBe(false);
+    });
+
+    it('debe aprobar release solo si published y filtrar otras acciones', () => {
+        const baseRelease: NormalizedReleaseEvent = {
+            type: 'release',
+            repositoryFullName: 'sandovaldavid/octobot',
+            action: 'published',
+            tagName: 'v1.0.0',
+            name: 'Release 1.0',
+            body: '',
+            htmlUrl: 'https://github.com',
+            authorLogin: 'dev',
+            authorAvatar: '',
+            prerelease: false,
+        };
+
+        expect(NotificationPolicy.shouldNotify({ ...baseRelease, action: 'published' }).notify).toBe(true);
+        expect(NotificationPolicy.shouldNotify({ ...baseRelease, action: 'created' }).notify).toBe(false);
+        expect(NotificationPolicy.shouldNotify({ ...baseRelease, action: 'edited' }).notify).toBe(false);
+        expect(NotificationPolicy.shouldNotify({ ...baseRelease, action: 'deleted' }).notify).toBe(false);
+    });
+
+    it('debe aprobar eventos push, create, delete', () => {
         const push: NormalizedPushEvent = {
             type: 'push',
             repositoryFullName: 'sandovaldavid/octobot',

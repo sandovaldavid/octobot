@@ -18,7 +18,7 @@ export class DiscordService {
     }
 
     public async sendNotification(
-        channelId: string = this.config.channelId,
+        channelId: string = this.config.channelId || '',
         notification: DiscordNotification
     ): Promise<void> {
         try {
