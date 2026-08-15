@@ -67,9 +67,38 @@ export class NotificationPolicy {
                 };
             }
 
+            case 'issues': {
+                // Actionable Issue states:
+                // - opened: new issue created
+                // - closed: issue resolved
+                // - assigned: issue assigned to a contributor
+                // - reopened: issue reopened
+                const actionableIssueActions = ['opened', 'closed', 'assigned', 'reopened'];
+
+                if (actionableIssueActions.includes(event.action)) {
+                    return { notify: true };
+                }
+
+                return {
+                    notify: false,
+                    reason: `Filtered non-actionable issue action: "${event.action}"`,
+                };
+            }
+
+            case 'release': {
+                // Actionable Release state:
+                // Only published releases
+                if (event.action === 'published') {
+                    return { notify: true };
+                }
+
+                return {
+                    notify: false,
+                    reason: `Filtered non-published release action: "${event.action}"`,
+                };
+            }
+
             case 'push':
-            case 'issues':
-            case 'release':
             case 'create':
             case 'delete':
                 return { notify: true };

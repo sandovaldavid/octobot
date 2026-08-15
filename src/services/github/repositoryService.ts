@@ -49,13 +49,18 @@ export const repositoryService = {
         }
     },
 
-    async getRepository() {
+    async getRepository(repoName?: string) {
         const octokit = githubClient.getOctokit();
         const config = githubClient.getConfig();
+        const repo = repoName || config.repo;
+
+        if (!repo) {
+            throw new Error('Repository name must be specified');
+        }
 
         return await octokit.rest.repos.get({
             owner: config.owner,
-            repo: config.repo,
+            repo,
         });
     },
 

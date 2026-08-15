@@ -194,8 +194,9 @@ Todos los comandos están agrupados bajo `/github`:
 
 ### Endpoints Disponibles
 
-- `GET /health` — Estado operacional de Discord, Webhooks y MongoDB (sin exponer secretos).
-- `POST /api/webhooks/github` — Receptor principal de eventos GitHub (protegido por middleware HMAC SHA-256 sobre `rawBody`).
+- `GET /health` — **Liveness Probe**: Estado del proceso HTTP y uptime (sin secretos).
+- `GET /ready` — **Readiness Probe**: Verifica conectividad activa con Discord Gateway y MongoDB (`200 READY` o `503 UNREADY`).
+- `POST /api/webhooks/github` — Receptor principal de eventos GitHub (protegido por middleware HMAC SHA-256 sobre `rawBody` con deduplicación atómica por `X-GitHub-Delivery`).
 
 ### Endpoints Eliminados (`404`)
 
@@ -206,9 +207,23 @@ Todos los comandos están agrupados bajo `/github`:
 
 ---
 
-## 🐳 Docker y Base de Datos
+## 🐳 Despliegue y Contenedores
 
-Para levantar el contenedor local de MongoDB:
+### Producción (Docker)
+
+```bash
+docker build -t octobot:1.0.0 -f Dockerfile .
+docker run -d --name octobot -p 4000:4000 --env-file .env octobot:1.0.0
+```
+
+Para detalles completos de arquitectura, topología, proxies inversos HTTPS y rollback, consulta:
+
+- 📖 **[Guía de Despliegue en Producción (DEPLOYMENT.md)](docs/DEPLOYMENT.md)**
+- 🧪 **[Guía de Onboarding y Smoke Tests del Piloto (PILOT.md)](docs/PILOT.md)**
+
+### Entorno Local de Desarrollo (MongoDB)
+
+Para levantar el contenedor local de MongoDB para desarrollo:
 
 ```bash
 docker compose -f docker-compose.development.yml up -d

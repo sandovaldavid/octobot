@@ -4,7 +4,7 @@ import { webhookService } from '@services/github/webhookService';
 import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { createCommand } from '@utils/commandBuilder';
-import { SUPPORTED_WEBHOOK_EVENTS } from '../../../types/webhook';
+import { DEFAULT_SUBSCRIPTION_EVENTS } from '../../../types/webhook';
 
 export const watch = createCommand({
     name: 'github',
@@ -73,7 +73,7 @@ export const watch = createCommand({
                     repositoryFullName: canonicalFullName,
                     guildId,
                     channelId,
-                    events: SUPPORTED_WEBHOOK_EVENTS,
+                    events: DEFAULT_SUBSCRIPTION_EVENTS,
                     active: true,
                 },
                 { upsert: true, new: true }
