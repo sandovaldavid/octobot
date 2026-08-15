@@ -11,25 +11,36 @@ export class EventProcessor {
         const { deliveryId, eventName } = delivery;
 
         try {
-            // 1. Normalize
-            const normalizedEvent = normalizeGithubEvent(delivery);
+            // 1. Normalize and Validate
+            const normResult = normalizeGithubEvent(delivery);
 
-            // 2. Handle ping
-            if (normalizedEvent.type === 'ping') {
+            if (!normResult.success) {
                 const durationMs = Date.now() - startTime;
-                this.logOutcome({
+                const result: ProcessingResult = {
                     deliveryId,
                     eventName,
-                    outcome: 'ignored_ping',
+                    repositoryFullName: normResult.repositoryFullName,
+                    outcome: 'invalid_payload',
                     matchedSubscriptions: 0,
                     attempted: 0,
                     succeeded: 0,
                     failed: 0,
                     durationMs,
-                });
-                return {
+                    error: normResult.reason,
+                };
+                this.logOutcome(result);
+                return result;
+            }
+
+            const normalizedEvent = normResult.event;
+
+            // 2. Handle ping
+            if (normalizedEvent.type === 'ping') {
+                const durationMs = Date.now() - startTime;
+                const result: ProcessingResult = {
                     deliveryId,
                     eventName,
+                    repositoryFullName: normalizedEvent.repositoryFullName,
                     outcome: 'ignored_ping',
                     matchedSubscriptions: 0,
                     attempted: 0,
@@ -37,24 +48,17 @@ export class EventProcessor {
                     failed: 0,
                     durationMs,
                 };
+                this.logOutcome(result);
+                return result;
             }
 
             // 3. Handle unsupported events
             if (normalizedEvent.type === 'unsupported') {
                 const durationMs = Date.now() - startTime;
-                this.logOutcome({
+                const result: ProcessingResult = {
                     deliveryId,
                     eventName,
-                    outcome: 'ignored_unsupported_event',
-                    matchedSubscriptions: 0,
-                    attempted: 0,
-                    succeeded: 0,
-                    failed: 0,
-                    durationMs,
-                });
-                return {
-                    deliveryId,
-                    eventName,
+                    repositoryFullName: normalizedEvent.repositoryFullName,
                     outcome: 'ignored_unsupported_event',
                     matchedSubscriptions: 0,
                     attempted: 0,
@@ -62,6 +66,8 @@ export class EventProcessor {
                     failed: 0,
                     durationMs,
                 };
+                this.logOutcome(result);
+                return result;
             }
 
             const repositoryFullName = normalizedEvent.repositoryFullName;
@@ -72,18 +78,7 @@ export class EventProcessor {
 
             if (matchedSubscriptionsCount === 0) {
                 const durationMs = Date.now() - startTime;
-                this.logOutcome({
-                    deliveryId,
-                    eventName,
-                    repositoryFullName,
-                    outcome: 'ignored_no_subscription',
-                    matchedSubscriptions: 0,
-                    attempted: 0,
-                    succeeded: 0,
-                    failed: 0,
-                    durationMs,
-                });
-                return {
+                const result: ProcessingResult = {
                     deliveryId,
                     eventName,
                     repositoryFullName,
@@ -94,22 +89,13 @@ export class EventProcessor {
                     failed: 0,
                     durationMs,
                 };
+                this.logOutcome(result);
+                return result;
             }
 
             if (targetChannelIds.length === 0) {
                 const durationMs = Date.now() - startTime;
-                this.logOutcome({
-                    deliveryId,
-                    eventName,
-                    repositoryFullName,
-                    outcome: 'ignored_subscription_filter',
-                    matchedSubscriptions: matchedSubscriptionsCount,
-                    attempted: 0,
-                    succeeded: 0,
-                    failed: 0,
-                    durationMs,
-                });
-                return {
+                const result: ProcessingResult = {
                     deliveryId,
                     eventName,
                     repositoryFullName,
@@ -120,24 +106,15 @@ export class EventProcessor {
                     failed: 0,
                     durationMs,
                 };
+                this.logOutcome(result);
+                return result;
             }
 
             // 5. Format Notification
             const notification = NotificationFactory.createNotification(normalizedEvent);
             if (!notification) {
                 const durationMs = Date.now() - startTime;
-                this.logOutcome({
-                    deliveryId,
-                    eventName,
-                    repositoryFullName,
-                    outcome: 'ignored_unsupported_event',
-                    matchedSubscriptions: matchedSubscriptionsCount,
-                    attempted: 0,
-                    succeeded: 0,
-                    failed: 0,
-                    durationMs,
-                });
-                return {
+                const result: ProcessingResult = {
                     deliveryId,
                     eventName,
                     repositoryFullName,
@@ -148,6 +125,8 @@ export class EventProcessor {
                     failed: 0,
                     durationMs,
                 };
+                this.logOutcome(result);
+                return result;
             }
 
             // 6. Deliver to Discord
@@ -194,8 +173,9 @@ export class EventProcessor {
     }
 
     private static logOutcome(result: ProcessingResult): void {
+        const errorInfo = result.error ? ` error="${result.error}"` : '';
         logger.info(
-            `[Pipeline] deliveryId=${result.deliveryId} event=${result.eventName} repo=${result.repositoryFullName || 'N/A'} outcome=${result.outcome} matched=${result.matchedSubscriptions} attempted=${result.attempted} succeeded=${result.succeeded} failed=${result.failed} durationMs=${result.durationMs}`
+            `[Pipeline] deliveryId=${result.deliveryId} event=${result.eventName} repo=${result.repositoryFullName || 'N/A'} outcome=${result.outcome} matched=${result.matchedSubscriptions} attempted=${result.attempted} succeeded=${result.succeeded} failed=${result.failed} durationMs=${result.durationMs}${errorInfo}`
         );
     }
 }

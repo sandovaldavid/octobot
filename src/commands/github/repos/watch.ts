@@ -1,9 +1,10 @@
 import { ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
 import { RepositorySubscriptionModel } from '@models/subscription';
 import { webhookService } from '@services/github/webhookService';
+import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { createCommand } from '@utils/commandBuilder';
-import { WEBHOOK_EVENTS } from '../../../types/webhook';
+import { SUPPORTED_WEBHOOK_EVENTS } from '../../../types/webhook';
 
 export const watch = createCommand({
     name: 'github',
@@ -40,18 +41,23 @@ export const watch = createCommand({
             }
 
             await interaction.deferReply();
-            const repoName = interaction.options.getString('name', true);
+            const repoInput = interaction.options.getString('name', true).trim();
             const channelId = interaction.channelId;
             const guildId = interaction.guildId || undefined;
 
-            debug.info(`Attempting to watch repository: ${repoName} in channel: ${channelId}`);
+            const config = githubClient.getConfig();
+            const canonicalFullName = repoInput.includes('/')
+                ? repoInput.toLowerCase()
+                : `${config.owner.toLowerCase()}/${repoInput.toLowerCase()}`;
 
-            const webhookResult = await webhookService.configureWebhook(repoName);
+            debug.info(`Attempting to watch repository: ${canonicalFullName} in channel: ${channelId}`);
+
+            const webhookResult = await webhookService.configureWebhook(canonicalFullName);
             if (!webhookResult.success) {
                 const errorMessage = webhookResult.error?.includes('does not exist')
-                    ? `❌ Repository \`${repoName}\` does not exist. Please check the name and try again.`
+                    ? `❌ Repository \`${canonicalFullName}\` does not exist. Please check the name and try again.`
                     : webhookResult.error?.includes('permission')
-                      ? `❌ No permission to configure webhooks for \`${repoName}\`. Make sure you have admin access.`
+                      ? `❌ No permission to configure webhooks for \`${canonicalFullName}\`. Make sure you have admin access.`
                       : `❌ Failed to configure webhook: ${webhookResult.error}`;
 
                 await interaction.editReply(errorMessage);
@@ -60,21 +66,21 @@ export const watch = createCommand({
 
             await RepositorySubscriptionModel.findOneAndUpdate(
                 {
-                    repositoryFullName: repoName.toLowerCase(),
+                    repositoryFullName: canonicalFullName,
                     channelId: channelId,
                 },
                 {
-                    repositoryFullName: repoName.toLowerCase(),
+                    repositoryFullName: canonicalFullName,
                     guildId,
                     channelId,
-                    events: WEBHOOK_EVENTS,
+                    events: SUPPORTED_WEBHOOK_EVENTS,
                     active: true,
                 },
                 { upsert: true, new: true }
             );
 
-            debug.info(`Successfully configured subscription for ${repoName} in channel ${channelId}`);
-            await interaction.editReply(`✅ Now watching \`${repoName}\` for updates in <#${channelId}>`);
+            debug.info(`Successfully configured subscription for ${canonicalFullName} in channel ${channelId}`);
+            await interaction.editReply(`✅ Now watching \`${canonicalFullName}\` for updates in <#${channelId}>`);
         } catch (error) {
             debug.error('Error in watch command:', error);
             const errorMessage = '❌ Failed to watch repository. Please try again later.';

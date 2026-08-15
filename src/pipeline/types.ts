@@ -2,7 +2,7 @@ export interface VerifiedGithubDelivery {
     deliveryId: string;
     eventName: string;
     receivedAt: Date;
-    payload: Record<string, any>;
+    payload: unknown;
 }
 
 export type ProcessingOutcome =
@@ -28,6 +28,19 @@ export interface ProcessingResult {
     error?: string;
 }
 
+export type PullRequestAction =
+    | 'opened'
+    | 'closed'
+    | 'reopened'
+    | 'synchronize'
+    | 'merged'
+    | 'ready_for_review'
+    | 'review_requested';
+
+export type IssueAction = 'opened' | 'closed' | 'reopened' | 'labeled' | 'unlabeled' | 'assigned' | 'unassigned';
+
+export type ReleaseAction = 'published' | 'created' | 'edited' | 'deleted' | 'prereleased';
+
 export interface NormalizedPushEvent {
     type: 'push';
     repositoryFullName: string;
@@ -45,7 +58,7 @@ export interface NormalizedPushEvent {
 export interface NormalizedPullRequestEvent {
     type: 'pull_request';
     repositoryFullName: string;
-    action: 'opened' | 'closed' | 'reopened' | 'synchronize' | 'merged' | string;
+    action: PullRequestAction;
     prNumber: number;
     title: string;
     body: string;
@@ -62,14 +75,14 @@ export interface NormalizedPullRequestEvent {
 export interface NormalizedIssueEvent {
     type: 'issues';
     repositoryFullName: string;
-    action: 'opened' | 'closed' | 'reopened' | 'labeled' | string;
+    action: IssueAction;
     issueNumber: number;
     title: string;
     body: string;
     htmlUrl: string;
     userLogin: string;
     userAvatar: string;
-    state: string;
+    state: 'open' | 'closed';
     labels: string[];
     assigneeLogin?: string;
 }
@@ -77,7 +90,7 @@ export interface NormalizedIssueEvent {
 export interface NormalizedReleaseEvent {
     type: 'release';
     repositoryFullName: string;
-    action: string;
+    action: ReleaseAction;
     tagName: string;
     name: string;
     htmlUrl: string;
@@ -129,3 +142,7 @@ export type NormalizedGithubEvent =
     | NormalizedBranchDeletedEvent
     | NormalizedPingEvent
     | NormalizedUnsupportedEvent;
+
+export type NormalizationResult =
+    | { success: true; event: NormalizedGithubEvent }
+    | { success: false; reason: string; repositoryFullName?: string };

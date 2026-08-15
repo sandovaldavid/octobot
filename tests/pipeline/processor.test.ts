@@ -4,6 +4,24 @@ import { SubscriptionRouter } from '../../src/pipeline/router';
 import { VerifiedGithubDelivery } from '../../src/pipeline/types';
 
 describe('Pipeline - Event Processor', () => {
+    it('debe retornar invalid_payload cuando el payload está malformado', async () => {
+        const delivery: VerifiedGithubDelivery = {
+            deliveryId: 'invalid-delivery-1',
+            eventName: 'pull_request',
+            receivedAt: new Date(),
+            payload: {
+                action: 'opened',
+                repository: { full_name: 'sandovaldavid/octobot' },
+                pull_request: {}, // missing number, title, etc.
+            },
+        };
+
+        const result = await EventProcessor.process(delivery);
+        expect(result.outcome).toBe('invalid_payload');
+        expect(result.attempted).toBe(0);
+        expect(result.error).toBeDefined();
+    });
+
     it('debe retornar ignored_ping para eventos de ping', async () => {
         const delivery: VerifiedGithubDelivery = {
             deliveryId: 'ping-delivery-1',
