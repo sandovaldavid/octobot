@@ -19,6 +19,7 @@ describe('Controller - GitHubOnboardingController', () => {
     let mockFetch: any;
 
     beforeEach(() => {
+        delete process.env.GITHUB_APP_SLUG;
         mockAttemptModel = {
             create: mock(async (doc: any) => ({ ...doc, _id: 'attempt-123' })),
             findOne: mock(async () => null),
