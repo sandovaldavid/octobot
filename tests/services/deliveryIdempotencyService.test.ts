@@ -1,14 +1,25 @@
-import { describe, expect, it, spyOn, beforeEach } from 'bun:test';
+import { describe, expect, it, spyOn, beforeEach, afterEach } from 'bun:test';
 import { DeliveryIdempotencyService } from '../../src/services/deliveryIdempotencyService';
 import { WebhookDeliveryModel } from '../../src/models/webhookDelivery';
 
 describe('Service - DeliveryIdempotencyService', () => {
+    let findOneAndUpdateSpy: any;
+    let createSpy: any;
+    let findOneSpy: any;
+
     beforeEach(() => {
-        spyOn(WebhookDeliveryModel, 'findOneAndUpdate').mockImplementation((() => Promise.resolve({})) as any);
+        findOneAndUpdateSpy = spyOn(WebhookDeliveryModel, 'findOneAndUpdate').mockImplementation((() =>
+            Promise.resolve({})) as any);
+    });
+
+    afterEach(() => {
+        if (findOneAndUpdateSpy?.mockRestore) findOneAndUpdateSpy.mockRestore();
+        if (createSpy?.mockRestore) createSpy.mockRestore();
+        if (findOneSpy?.mockRestore) findOneSpy.mockRestore();
     });
 
     it('debe reclamar exitosamente una entrega nueva (primer intento)', async () => {
-        spyOn(WebhookDeliveryModel, 'create').mockResolvedValue({} as any);
+        createSpy = spyOn(WebhookDeliveryModel, 'create').mockResolvedValue({} as any);
 
         const result = await DeliveryIdempotencyService.claimDelivery('guid-new-1', 'push');
         expect(result.claimed).toBe(true);
@@ -16,8 +27,8 @@ describe('Service - DeliveryIdempotencyService', () => {
     });
 
     it('debe suprimir procesamiento y retornar 200 para entregas ya completadas', async () => {
-        spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
-        spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
+        createSpy = spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
+        findOneSpy = spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
             deliveryId: 'guid-completed-1',
             status: 'completed',
             finalOutcome: 'delivered',
@@ -32,8 +43,8 @@ describe('Service - DeliveryIdempotencyService', () => {
     });
 
     it('debe suprimir procesamiento y retornar 400 para entregas previamente rechazadas', async () => {
-        spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
-        spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
+        createSpy = spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
+        findOneSpy = spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
             deliveryId: 'guid-rejected-1',
             status: 'rejected',
             finalOutcome: 'invalid_payload',
@@ -48,8 +59,8 @@ describe('Service - DeliveryIdempotencyService', () => {
     });
 
     it('debe suprimir procesamiento concurrente y retornar 202 para entregas en vuelo con lease activo', async () => {
-        spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
-        spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
+        createSpy = spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
+        findOneSpy = spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
             deliveryId: 'guid-in-flight-1',
             status: 'processing',
             leaseExpiresAt: new Date(Date.now() + 30000), // active lease
@@ -64,14 +75,14 @@ describe('Service - DeliveryIdempotencyService', () => {
     });
 
     it('debe permitir recuperar atómicamente el lease si la entrega en vuelo expiró (crash recovery)', async () => {
-        spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
-        spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
+        createSpy = spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
+        findOneSpy = spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
             deliveryId: 'guid-expired-1',
             status: 'processing',
             leaseExpiresAt: new Date(Date.now() - 10000), // expired lease
         } as any);
 
-        spyOn(WebhookDeliveryModel, 'findOneAndUpdate').mockResolvedValue({
+        findOneAndUpdateSpy = spyOn(WebhookDeliveryModel, 'findOneAndUpdate').mockResolvedValue({
             deliveryId: 'guid-expired-1',
             status: 'processing',
         } as any);
@@ -83,13 +94,13 @@ describe('Service - DeliveryIdempotencyService', () => {
     });
 
     it('debe permitir reintentar atómicamente entregas con estado retryable_failed', async () => {
-        spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
-        spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
+        createSpy = spyOn(WebhookDeliveryModel, 'create').mockRejectedValue({ code: 11000, name: 'MongoServerError' });
+        findOneSpy = spyOn(WebhookDeliveryModel, 'findOne').mockResolvedValue({
             deliveryId: 'guid-failed-1',
             status: 'retryable_failed',
         } as any);
 
-        spyOn(WebhookDeliveryModel, 'findOneAndUpdate').mockResolvedValue({
+        findOneAndUpdateSpy = spyOn(WebhookDeliveryModel, 'findOneAndUpdate').mockResolvedValue({
             deliveryId: 'guid-failed-1',
             status: 'processing',
         } as any);
@@ -101,14 +112,17 @@ describe('Service - DeliveryIdempotencyService', () => {
     });
 
     it('debe fallar cerrado (throw) ante errores no relacionados con clave duplicada', async () => {
-        spyOn(WebhookDeliveryModel, 'create').mockRejectedValue(new Error('Connection lost'));
+        createSpy = spyOn(WebhookDeliveryModel, 'create').mockRejectedValue(new Error('Connection lost'));
 
         expect(DeliveryIdempotencyService.claimDelivery('guid-err-1', 'push')).rejects.toThrow('Connection lost');
     });
 
     it('debe mapear correctamente los outcomes al finalizar la entrega', async () => {
         let updateArgs: any = null;
-        spyOn(WebhookDeliveryModel, 'findOneAndUpdate').mockImplementation(((filter: any, update: any) => {
+        findOneAndUpdateSpy = spyOn(WebhookDeliveryModel, 'findOneAndUpdate').mockImplementation(((
+            filter: any,
+            update: any
+        ) => {
             updateArgs = update;
             return Promise.resolve({});
         }) as any);

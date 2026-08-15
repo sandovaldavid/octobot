@@ -1,11 +1,19 @@
-import { describe, expect, it, spyOn, beforeEach } from 'bun:test';
+import { describe, expect, it, spyOn, beforeEach, afterEach } from 'bun:test';
 import { WorkflowStateService } from '../../src/services/workflowStateService';
 import { WorkflowAlertStateModel } from '../../src/models/workflowAlertState';
 
 describe('Service - WorkflowStateService', () => {
+    let updateSpy: any;
+    let findSpy: any;
+
     beforeEach(() => {
-        // Reset spies
-        spyOn(WorkflowAlertStateModel, 'findOneAndUpdate').mockImplementation((() => Promise.resolve({})) as any);
+        updateSpy = spyOn(WorkflowAlertStateModel, 'findOneAndUpdate').mockImplementation((() =>
+            Promise.resolve({})) as any);
+    });
+
+    afterEach(() => {
+        if (updateSpy?.mockRestore) updateSpy.mockRestore();
+        if (findSpy?.mockRestore) findSpy.mockRestore();
     });
 
     it('debe ignorar workflows no completados', async () => {
@@ -25,7 +33,7 @@ describe('Service - WorkflowStateService', () => {
     });
 
     it('debe alertar fallo cuando el estado previo es healthy o inexistente (primer fallo)', async () => {
-        spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue(null as any);
+        findSpy = spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue(null as any);
 
         const decision = await WorkflowStateService.evaluateTransition({
             repositoryFullName: 'sandovaldavid/octobot',
@@ -45,7 +53,7 @@ describe('Service - WorkflowStateService', () => {
     });
 
     it('debe suprimir alertas repetidas si el workflow ya estaba failing', async () => {
-        spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue({
+        findSpy = spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue({
             state: 'failing',
             lastRunNumber: 10,
             lastRunAttempt: 1,
@@ -68,7 +76,7 @@ describe('Service - WorkflowStateService', () => {
     });
 
     it('debe alertar recuperación (recovery) cuando un workflow previo failing pasa a success', async () => {
-        spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue({
+        findSpy = spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue({
             state: 'failing',
             lastRunNumber: 10,
             lastRunAttempt: 1,
@@ -92,7 +100,7 @@ describe('Service - WorkflowStateService', () => {
     });
 
     it('debe ignorar ejecuciones success cuando el workflow ya estaba healthy', async () => {
-        spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue({
+        findSpy = spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue({
             state: 'healthy',
             lastRunNumber: 10,
             lastRunAttempt: 1,
@@ -115,13 +123,12 @@ describe('Service - WorkflowStateService', () => {
     });
 
     it('debe ignorar entregas fuera de orden o re-ejecuciones tardías (out of order)', async () => {
-        spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue({
+        findSpy = spyOn(WorkflowAlertStateModel, 'findOne').mockResolvedValue({
             state: 'healthy',
             lastRunNumber: 12,
             lastRunAttempt: 2,
         } as any);
 
-        // Attempt 1 of run 12 arrives after Attempt 2 was already recorded
         const decision = await WorkflowStateService.evaluateTransition({
             repositoryFullName: 'sandovaldavid/octobot',
             workflowId: 100,

@@ -1,10 +1,12 @@
-import { describe, expect, it, spyOn, beforeEach } from 'bun:test';
+import { describe, expect, it, spyOn, beforeEach, afterEach } from 'bun:test';
 import { webhookController } from '../../src/controllers/webhookController';
 import { DeliveryIdempotencyService } from '../../src/services/deliveryIdempotencyService';
 import { EventProcessor } from '../../src/pipeline/processor';
 
 describe('Controller - WebhookController Idempotency', () => {
     let processSpy: any;
+    let claimSpy: any;
+    let finalizeSpy: any;
 
     beforeEach(() => {
         processSpy = spyOn(EventProcessor, 'process').mockResolvedValue({
@@ -17,16 +19,21 @@ describe('Controller - WebhookController Idempotency', () => {
             failed: 0,
             durationMs: 5,
         });
-        processSpy.mockClear();
+    });
+
+    afterEach(() => {
+        if (processSpy?.mockRestore) processSpy.mockRestore();
+        if (claimSpy?.mockRestore) claimSpy.mockRestore();
+        if (finalizeSpy?.mockRestore) finalizeSpy.mockRestore();
     });
 
     it('debe procesar el evento cuando la entrega es reclamada exitosamente', async () => {
-        spyOn(DeliveryIdempotencyService, 'claimDelivery').mockResolvedValue({
+        claimSpy = spyOn(DeliveryIdempotencyService, 'claimDelivery').mockResolvedValue({
             claimed: true,
             isDuplicate: false,
         });
 
-        const finalizeSpy = spyOn(DeliveryIdempotencyService, 'finalizeDelivery').mockResolvedValue();
+        finalizeSpy = spyOn(DeliveryIdempotencyService, 'finalizeDelivery').mockResolvedValue();
 
         const req: any = {
             headers: {
@@ -59,7 +66,7 @@ describe('Controller - WebhookController Idempotency', () => {
     });
 
     it('debe suprimir procesamiento y retornar 200 para entregas ya completadas sin llamar a EventProcessor', async () => {
-        spyOn(DeliveryIdempotencyService, 'claimDelivery').mockResolvedValue({
+        claimSpy = spyOn(DeliveryIdempotencyService, 'claimDelivery').mockResolvedValue({
             claimed: false,
             isDuplicate: true,
             status: 'completed',
@@ -98,7 +105,7 @@ describe('Controller - WebhookController Idempotency', () => {
     });
 
     it('debe suprimir procesamiento y retornar 202 para entregas en vuelo sin llamar a EventProcessor', async () => {
-        spyOn(DeliveryIdempotencyService, 'claimDelivery').mockResolvedValue({
+        claimSpy = spyOn(DeliveryIdempotencyService, 'claimDelivery').mockResolvedValue({
             claimed: false,
             isDuplicate: true,
             status: 'in_flight',
@@ -137,7 +144,7 @@ describe('Controller - WebhookController Idempotency', () => {
     });
 
     it('debe fallar cerrado retornando 503 si el servicio de idempotencia no puede establecer el claim', async () => {
-        spyOn(DeliveryIdempotencyService, 'claimDelivery').mockRejectedValue(new Error('DB Timeout'));
+        claimSpy = spyOn(DeliveryIdempotencyService, 'claimDelivery').mockRejectedValue(new Error('DB Timeout'));
 
         const req: any = {
             headers: {
