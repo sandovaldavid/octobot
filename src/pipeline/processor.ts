@@ -4,6 +4,7 @@ import { NotificationPolicy } from './policy';
 import { SubscriptionRouter } from './router';
 import { NotificationFactory } from './formatter';
 import { DiscordDelivery } from './delivery';
+import { WorkflowStateService } from '@services/workflowStateService';
 import { logger, debug } from '@utils/logger';
 
 export class EventProcessor {
@@ -73,7 +74,24 @@ export class EventProcessor {
 
             const repositoryFullName = normalizedEvent.repositoryFullName;
 
-            // 4. Apply Notification Policy (Filter Noise)
+            // 4. For workflow_run, evaluate state transitions and ordering
+            if (normalizedEvent.type === 'workflow_run') {
+                const transition = await WorkflowStateService.evaluateTransition({
+                    repositoryFullName: normalizedEvent.repositoryFullName,
+                    workflowId: normalizedEvent.workflowId,
+                    headBranch: normalizedEvent.headBranch,
+                    runId: normalizedEvent.runId,
+                    runNumber: normalizedEvent.runNumber,
+                    runAttempt: normalizedEvent.runAttempt,
+                    action: normalizedEvent.action,
+                    conclusion: normalizedEvent.conclusion,
+                });
+
+                normalizedEvent.alertType = transition.alertType;
+                normalizedEvent.previousState = transition.previousState;
+            }
+
+            // 5. Apply Notification Policy (Filter Noise)
             const policyDecision = NotificationPolicy.shouldNotify(normalizedEvent);
             if (!policyDecision.notify) {
                 const durationMs = Date.now() - startTime;
@@ -93,7 +111,7 @@ export class EventProcessor {
                 return result;
             }
 
-            // 5. Resolve Subscriptions
+            // 6. Resolve Subscriptions
             const { matchedSubscriptionsCount, targetChannelIds } =
                 await SubscriptionRouter.resolveTargetChannels(normalizedEvent);
 
@@ -131,7 +149,7 @@ export class EventProcessor {
                 return result;
             }
 
-            // 6. Format Notification
+            // 7. Format Notification
             const notification = NotificationFactory.createNotification(normalizedEvent);
             if (!notification) {
                 const durationMs = Date.now() - startTime;
@@ -150,7 +168,7 @@ export class EventProcessor {
                 return result;
             }
 
-            // 7. Deliver to Discord
+            // 8. Deliver to Discord
             const { attempted, succeeded, failed } = await DiscordDelivery.deliver(targetChannelIds, notification);
 
             const outcome: ProcessingOutcome =

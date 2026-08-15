@@ -72,16 +72,24 @@ graph TD
     DiscordClient -->|Manage Subscriptions| Subs
 ```
 
-### Datos Persistidos en MongoDB (`RepositorySubscription`)
+### Datos Persistidos en MongoDB (`RepositorySubscription` y `WorkflowAlertState`)
 
 MongoDB almacena **únicamente datos operativos propiedad de OctoBot**:
 
-- `repositoryFullName`: Nombre del repositorio (e.g. `owner/repo`).
-- `guildId`: ID del servidor de Discord.
-- `channelId`: ID del canal de Discord configurado para recibir alertas.
-- `events`: Tipos de eventos suscritos (`push`, `pull_request`, `issues`, etc.).
-- `active`: Estado booleano de la suscripción.
-- `createdAt`, `updatedAt`: Marcas temporales.
+- `RepositorySubscription`:
+
+    - `repositoryFullName`: Nombre del repositorio (e.g. `owner/repo`).
+    - `guildId`: ID del servidor de Discord.
+    - `channelId`: ID del canal de Discord configurado para recibir alertas.
+    - `events`: Tipos de eventos suscritos (`push`, `pull_request`, `pull_request_review`, `workflow_run`, `issues`, etc.).
+    - `active`: Estado booleano de la suscripción.
+    - `createdAt`, `updatedAt`: Marcas temporales.
+
+- `WorkflowAlertState`:
+    - `repositoryFullName`, `workflowId`, `headBranch`: Clave única compuesta para seguimiento de salud de CI.
+    - `state`: Estado actual (`healthy` | `failing`).
+    - `lastRunId`, `lastRunNumber`, `lastRunAttempt`: Identificadores para deduplicación y protección contra entregas fuera de orden.
+    - `lastFailureRunId`, `lastFailureAt`: Metadatos del último fallo registrado.
 
 ---
 
@@ -91,6 +99,7 @@ MongoDB almacena **únicamente datos operativos propiedad de OctoBot**:
 
 - Lectura de metadata de repositorios suscritos;
 - Lectura de issues en vivo para el comando `/github issues list`;
+- Lectura de ejecuciones de GitHub Actions (`Actions: read`) para alertas de CI/CD (`workflow_run`);
 - Creación y eliminación de repository webhooks (`watch`, `unwatch`).
 
 OctoBot **no cuenta ni requiere** capacidades para:

@@ -5,6 +5,7 @@ export const SUPPORTED_WEBHOOK_EVENTS = [
     'push',
     'pull_request',
     'pull_request_review',
+    'workflow_run',
     'issues',
     'release',
     'create',

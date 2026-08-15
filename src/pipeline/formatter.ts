@@ -148,6 +148,78 @@ export class NotificationFactory {
                 });
             }
 
+            case 'workflow_run': {
+                const isRecovery = event.alertType === 'recovery';
+                const isFailure = event.alertType === 'failure';
+
+                if (!isRecovery && !isFailure) return null;
+
+                const title = isRecovery
+                    ? `🟢 CI Recovered — ${event.workflowName}`
+                    : `🔴 CI Failed — ${event.workflowName}`;
+
+                const color = isRecovery ? DiscordColors.SUCCESS : DiscordColors.ERROR;
+                const statusText = isRecovery ? 'Passing again' : event.conclusion?.toUpperCase() || 'FAILURE';
+
+                const fields = [
+                    {
+                        name: 'Status',
+                        value: statusText,
+                        inline: true,
+                    },
+                    {
+                        name: 'Run',
+                        value: `#${event.runNumber} • attempt ${event.runAttempt}`,
+                        inline: true,
+                    },
+                    {
+                        name: 'Branch',
+                        value: `${event.repositoryFullName} • \`${event.headBranch}\``,
+                        inline: true,
+                    },
+                ];
+
+                if (isRecovery) {
+                    fields.push({
+                        name: 'Previous state',
+                        value: '`failing`',
+                        inline: true,
+                    });
+                }
+
+                if (event.headSha) {
+                    fields.push({
+                        name: 'Commit',
+                        value: `\`${event.headSha.substring(0, 7)}\``,
+                        inline: true,
+                    });
+                }
+
+                if (event.senderLogin) {
+                    fields.push({
+                        name: 'Triggered by',
+                        value: `@${event.senderLogin}`,
+                        inline: true,
+                    });
+                }
+
+                return discordService.createGithubNotification({
+                    type: 'workflow',
+                    action: isRecovery ? 'success' : 'failure',
+                    title,
+                    description: isRecovery
+                        ? `Workflow **${event.workflowName}** recovered on \`${event.headBranch}\``
+                        : `Workflow **${event.workflowName}** failed on \`${event.headBranch}\``,
+                    url: event.htmlUrl,
+                    author: {
+                        name: event.senderLogin,
+                        avatar: event.senderAvatar,
+                    },
+                    fields,
+                    color,
+                });
+            }
+
             case 'issues': {
                 return discordService.createGithubNotification({
                     type: 'issue',

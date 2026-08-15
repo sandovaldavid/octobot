@@ -47,6 +47,26 @@ export class NotificationPolicy {
                 };
             }
 
+            case 'workflow_run': {
+                // Actionable CI/CD alerts:
+                // Only completed workflow runs that represent a state transition (failure or recovery)
+                if (event.action !== 'completed') {
+                    return {
+                        notify: false,
+                        reason: `Filtered in-progress/requested workflow_run action: "${event.action}"`,
+                    };
+                }
+
+                if (event.alertType === 'failure' || event.alertType === 'recovery') {
+                    return { notify: true };
+                }
+
+                return {
+                    notify: false,
+                    reason: 'Filtered non-actionable workflow state (healthy success or repeated failure)',
+                };
+            }
+
             case 'push':
             case 'issues':
             case 'release':

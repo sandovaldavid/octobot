@@ -106,7 +106,59 @@ describe('Pipeline - Event Normalizer', () => {
             payload: {
                 action: 'submitted',
                 repository: { full_name: 'sandovaldavid/octobot' },
-                // missing review and pull_request
+            },
+        };
+
+        const result = normalizeGithubEvent(delivery);
+        expect(result.success).toBe(false);
+    });
+
+    it('debe normalizar eventos workflow_run correctamente', () => {
+        const delivery: VerifiedGithubDelivery = {
+            deliveryId: 'del-wf-1',
+            eventName: 'workflow_run',
+            receivedAt: new Date(),
+            payload: {
+                action: 'completed',
+                repository: { full_name: 'sandovaldavid/octobot' },
+                workflow_run: {
+                    id: 9999,
+                    workflow_id: 1234,
+                    name: 'CI / Test',
+                    head_branch: 'develop',
+                    head_sha: '1234567890abcdef',
+                    run_number: 45,
+                    run_attempt: 1,
+                    conclusion: 'failure',
+                    html_url: 'https://github.com/sandovaldavid/octobot/actions/runs/9999',
+                },
+                sender: { login: 'ci-bot', avatar_url: 'https://avatar.url' },
+            },
+        };
+
+        const result = normalizeGithubEvent(delivery);
+        expect(result.success).toBe(true);
+        if (result.success && result.event.type === 'workflow_run') {
+            expect(result.event.workflowId).toBe(1234);
+            expect(result.event.workflowName).toBe('CI / Test');
+            expect(result.event.headBranch).toBe('develop');
+            expect(result.event.conclusion).toBe('failure');
+            expect(result.event.runNumber).toBe(45);
+        }
+    });
+
+    it('debe rechazar eventos workflow_run sin workflow_run object o head_branch', () => {
+        const delivery: VerifiedGithubDelivery = {
+            deliveryId: 'del-bad-wf',
+            eventName: 'workflow_run',
+            receivedAt: new Date(),
+            payload: {
+                action: 'completed',
+                repository: { full_name: 'sandovaldavid/octobot' },
+                workflow_run: {
+                    id: 9999,
+                    // missing workflow_id and head_branch
+                },
             },
         };
 
@@ -207,7 +259,7 @@ describe('Pipeline - Event Normalizer', () => {
     it('debe marcar eventos no soportados como unsupported', () => {
         const delivery: VerifiedGithubDelivery = {
             deliveryId: 'del-unknown-1',
-            eventName: 'workflow_run',
+            eventName: 'deployment',
             receivedAt: new Date(),
             payload: {
                 repository: { full_name: 'sandovaldavid/octobot' },
