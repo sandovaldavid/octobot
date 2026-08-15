@@ -12,11 +12,11 @@
 This specification formalizes the transition of OctoBot from a single-operator bot (utilizing personal access tokens and fixed guild IDs) into an installable multi-tenant Discord and GitHub App integration.
 
 ### Core Architectural Goals
-1. **GitHub App Installation Authentication:** Eliminate long-lived `GITHUB_TOKEN` (PAT) for operations. Use short-lived installation access tokens generated dynamically on-demand via `@octokit/app`.
-2. **Cryptographic Proof-of-Authorization Handshake:** Secure onboarding via GitHub App Setup URL + ephemeral OAuth verification to prevent installation spoofing.
+1. **GitHub App Installation Authentication:** Eliminate long-lived `GITHUB_TOKEN` (PAT) as the primary operational model. Use short-lived installation access tokens generated dynamically on-demand via `@octokit/app`.
+2. **Cryptographic Proof-of-Authorization Handshake with PKCE:** Secure onboarding via GitHub App Setup URL + OAuth PKCE verification (`code_challenge` / `code_verifier`) ensuring the candidate installation is accessible to the authenticated GitHub user.
 3. **Decoupled Tenant & Credential Resolvers:** `GitHubInstallationResolver` maps Discord `guildId` to active installations; `GitHubClientResolver` generates and caches scoped `Octokit` instances.
 4. **Canonical `/gh` Command Namespace:** Introduce global `/gh` commands with centralized policy-based authorization (`ManageGuild` vs Member) and progressive deprecation notices for `/github`.
-5. **Multi-Tenant Event Routing:** Route GitHub App webhook deliveries using `installation.id` + `repository.id` matching to isolate subscriptions across Discord guilds with zero cross-tenant leakage.
+5. **Fail-Closed Multi-Tenant Event Routing:** Route GitHub App webhook deliveries using `(installation.id, repository.id)` and enforce that delivery requires `Subscription.active = true AND DiscordGuildConnection.status = 'connected' AND GitHubInstallation.status = 'active'`.
 
 ---
 
@@ -39,7 +39,7 @@ This specification formalizes the transition of OctoBot from a single-operator b
                         │ CommandAuthorizationPolicy │        ┌─────────────▼─────────────┐
                         │ • ManageGuild vs Member    │        │ Setup & Webhook Pipelines │
                         └─────────────┬──────────────┘        │ • Nonce atomic verify     │
-                                      │                       │ • User OAuth proof check  │
+                                      │                       │ • PKCE OAuth proof check  │
                                       ▼                       │ • HMAC SHA-256 Pipeline   │
                         ┌────────────────────────────┐        └─────────────┬─────────────┘
                         │ GitHubInstallationResolver │                      │
@@ -66,17 +66,18 @@ This specification formalizes the transition of OctoBot from a single-operator b
 
 ## 3. Data Models (MongoDB)
 
-### 3.1 `GitHubConnectionAttempt` (Ephemeral Handshake State)
+### 3.1 `GitHubConnectionAttempt` (Ephemeral Handshake State with PKCE)
 Stores the single-use cryptographic state for correlation between Discord interactions and the GitHub redirect flow.
 
 ```ts
 export interface IGitHubConnectionAttempt {
   installStateHash: string; // SHA-256 of the 256-bit install nonce (Unique index)
   oauthStateHash?: string; // SHA-256 of the 256-bit oauth nonce (Sparse unique index)
+  oauthCodeVerifier?: string; // Ephemeral PKCE code_verifier (never logged, TTL bounded)
   guildId: string; // Discord Guild Snowflake
   initiatedByDiscordUserId: string; // Admin initiating the connection
   candidateInstallationId?: number; // Captured from /setup before OAuth verification
-  status: 'pending_setup' | 'pending_oauth' | 'consumed';
+  status: 'pending_setup' | 'pending_oauth' | 'verifying' | 'consumed' | 'failed';
   expiresAt: Date; // TTL Index (expires in 10 minutes)
   createdAt: Date;
   updatedAt: Date;
@@ -133,11 +134,15 @@ export interface ISubscription {
 }
 ```
 
+**Indexes for `Subscription`:**
+- Compound Unique Index: `{ installationId: 1, repositoryId: 1, guildId: 1, channelId: 1 }` (prevents duplicate subscriptions per channel).
+- Routing Index: `{ installationId: 1, repositoryId: 1, active: 1 }` (optimizes webhook dispatch).
+
 ---
 
-## 4. Onboarding Protocol: Setup URL + Proof-of-Authorization
+## 4. Onboarding Protocol: Setup URL + Proof-of-Authorization (PKCE)
 
-To prevent installation ID spoofing (GitHub Setup URL vulnerability where an attacker can supply an `installation_id` they do not own), OctoBot employs a two-step handshake:
+To prevent installation ID spoofing (GitHub Setup URL vulnerability where an attacker supplies an `installation_id` they do not own), OctoBot employs a hardened two-step handshake with PKCE and a transactional state machine:
 
 ```text
 Discord (/gh connect)
@@ -151,21 +156,23 @@ Ephemeral Link to GitHub App Install URL: https://github.com/apps/<app-name>/ins
 GET /api/github/setup?installation_id=123&state=<installNonce>
    │
    │ 3. Atomic verify: find & update ConnectionAttempt (status: pending_oauth, candidateInstallationId: 123)
-   │ 4. Generate 256-bit oauthNonce and save oauthStateHash
+   │ 4. Generate 256-bit oauthNonce, generate PKCE code_verifier + code_challenge (S256)
+   │ 5. Save oauthStateHash and oauthCodeVerifier to attempt
    ▼
-HTTP 302 Redirect to GitHub OAuth: https://github.com/login/oauth/authorize?client_id=...&state=<oauthNonce>
+HTTP 302 Redirect to GitHub OAuth: https://github.com/login/oauth/authorize?client_id=...&state=<oauthNonce>&code_challenge=<challenge>&code_challenge_method=S256
    │
-   │ 5. Admin authorizes proof-of-identity on GitHub
+   │ 6. Admin authorizes proof-of-identity on GitHub
    ▼
 GET /api/github/callback?code=<code>&state=<oauthNonce>
    │
-   │ 6. Atomic verify oauthStateHash & consume attempt (status: consumed)
-   │ 7. Exchange code for temporary user access token via GitHub OAuth API
-   │ 8. Call GET /user/installations with user token to verify installation_id 123 is present in accessible installations
-   │ 9. Discard user access token immediately (never stored in database/memory)
-   │ 10. Atomic upsert:
-   │     - GitHubInstallation { installationId: 123, status: 'active', ... }
-   │     - DiscordGuildConnection { guildId, installationId: 123, status: 'connected' }
+   │ 7. Atomic claim: findOneAndUpdate({ oauthStateHash, status: 'pending_oauth' }, { status: 'verifying' })
+   │ 8. Exchange code + oauthCodeVerifier for request-scoped user access token via GitHub OAuth API
+   │ 9. Call GET /user/installations with user token to verify installation_id 123 is in accessible installations
+   │ 10. Discard user access token immediately (request-scoped only, never persisted, cached, or logged)
+   │ 11. Transactional state completion:
+   │     - Upsert GitHubInstallation { installationId: 123, status: 'active', ... }
+   │     - Upsert DiscordGuildConnection { guildId, installationId: 123, status: 'connected' }
+   │     - Update ConnectionAttempt status: 'consumed'
    ▼
 HTTP 200 Success Page: "OctoBot successfully connected to your Discord server! You can now use /gh repo watch."
 ```
@@ -218,9 +225,8 @@ export interface IGitHubClientResolver {
 | `/gh` | `status` | Any Guild Member | Displays bounded connection & subscription state |
 | `/gh` | `repo watch` | `ManageGuild` / `Administrator` | Subscribes channel to repository events |
 | `/gh` | `repo unwatch` | `ManageGuild` / `Administrator` | Removes repository subscription |
-| `/gh` | `repo check` | Any Guild Member | Shows webhook & subscription health for repo |
+| `/gh` | `repo check` | Any Guild Member | Composite health check (installation, access, subscription, channel) |
 | `/gh` | `issues list` | Any Guild Member | Lists open issues for a watched repository |
-| `/gh` | `pulls list` | Any Guild Member | Lists open PRs for a watched repository |
 | `/github` | `*` (all) | *Identical to `/gh`* | Deprecated alias with `CommandResponseDecorator` |
 
 ### 6.3 Deprecation Decorator (`CommandResponseDecorator`)
@@ -244,13 +250,18 @@ When invoked through `/github`:
   - `action: suspend` ➔ Update `GitHubInstallation` to `suspended`, evict from client cache.
   - `action: unsuspend` ➔ Update `GitHubInstallation` to `active`.
 - `event: installation_repositories`:
-  - `action: added` ➔ Update accessible repository lists.
-  - `action: removed` ➔ Deactivate subscriptions for removed repositories.
+  - `action: added` ➔ Update `repositorySelection` metadata on `GitHubInstallation` (no repository list mirroring in DB).
+  - `action: removed` ➔ Deactivate matching `Subscription`s and update `repositorySelection` metadata.
+  - *Selection Semantics Reconciliation:* If `repository_selection` changes from `all` to `selected` (where `repositories_removed` may arrive empty), reconcile against GitHub API (`GET /installation/repositories`) to prune subscriptions for inaccessible repositories.
 
-### 7.3 Repository Event Routing
+### 7.3 Fail-Closed Multi-Tenant Event Routing
 - Webhook payload extracts `installation.id` and `repository.id`.
 - Queries active subscriptions: `Subscription.find({ repositoryId, installationId, active: true })`.
-- Delivers Discord embeds strictly to the mapped `guildId` and `channelId`, ensuring total tenant isolation.
+- For each matched subscription, verifies:
+  1. `Subscription.active === true`
+  2. Matching `DiscordGuildConnection.status === 'connected'`
+  3. Matching `GitHubInstallation.status === 'active'`
+- Delivers Discord embeds strictly to the verified `guildId` and `channelId`, ensuring total tenant isolation and failing closed on suspended/disconnected states.
 
 ---
 
@@ -265,14 +276,14 @@ InstallationRevokedError         "The GitHub installation was uninstalled. Pleas
 RepositoryNotAccessibleError     "OctoBot does not have access to this repository under your GitHub App installation."
 MissingCommandPermissionError    "You need 'Manage Server' permissions to configure OctoBot integrations."
 HandshakeExpiredError            "Connection request expired or already consumed. Please run /gh connect again."
-InstallationSpoofingError        "Installation verification failed: user is not an administrator of this GitHub installation."
+InstallationVerificationError    "The GitHub installation could not be verified for the authenticated GitHub user."
 ```
 
 ---
 
 ## 9. Environment & Secrets Specification
 
-### Operator Environment Variables
+### 9.1 Canonical Multi-Tenant Configuration (Required in Production)
 ```env
 # GitHub App Configuration
 GITHUB_APP_ID=123456
@@ -283,28 +294,31 @@ GITHUB_CLIENT_SECRET=your_oauth_client_secret
 
 # Discord Configuration
 DISCORD_TOKEN=your_bot_token
-DISCORD_APPLICATION_ID=your_discord_app_id
+DISCORD_CLIENT_ID=your_discord_client_id
 
 # Database & Server
 MONGODB_URI=mongodb://localhost:27017/db-octobot
 PORT=4000
 NODE_ENV=production
-PUBLIC_URL=https://octobot.example.com
+API_URL=https://octobot.example.com
 ```
 
-### Removed from Operator Runtime (Post-Migration)
-- `GITHUB_TOKEN` (PAT eliminated)
-- `GITHUB_OWNER`
-- `GITHUB_REPO`
-- `DISCORD_GUILD_ID`
-- `DISCORD_CHANNEL_ID`
+### 9.2 Legacy Compatibility Configuration (Deprecated in Minor, Removed in Major)
+```env
+# Single-Tenant PAT Mode (Deprecated)
+GITHUB_TOKEN=ghp_xxx
+GITHUB_OWNER=owner
+GITHUB_REPO=repo
+DISCORD_GUILD_ID=123456789012345678
+DISCORD_CHANNEL_ID=123456789012345678
+```
 
 ---
 
 ## 10. Governance & Release Strategy (SemVer)
 
 - **Phase 1 (Next Minor Release):**
-  - Implement GitHub App authentication, setup handshake, resolvers, `/gh` command surface, and `/github` deprecation notice.
-  - Fully backward compatible with existing V1 deployments.
+  - Canonical GitHub App authentication, Setup/OAuth handshake, resolvers, `/gh` command surface, and `/github` deprecation notice.
+  - Legacy PAT mode supported with deprecation warnings.
 - **Phase 2 (Next Deliberate Major Release):**
-  - Breaking change removal of `/github` command namespace and legacy single-tenant PAT fallback.
+  - Breaking change removal of `/github` command namespace, legacy PAT mode, and legacy environment variables (`GITHUB_TOKEN`, `DISCORD_GUILD_ID`).

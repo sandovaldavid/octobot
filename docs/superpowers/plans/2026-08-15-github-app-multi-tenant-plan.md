@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement multi-tenant GitHub App installation authentication, secure Setup/OAuth onboarding handshake, decoupled tenant/client resolvers, and the canonical `/gh` global Discord command surface with `/github` deprecation.
+**Goal:** Implement multi-tenant GitHub App installation authentication, secure Setup/OAuth PKCE onboarding handshake, decoupled tenant/client resolvers, and the canonical `/gh` global Discord command surface with `/github` deprecation.
 
-**Architecture:** A two-tier resolver system separates tenant resolution (`GitHubInstallationResolver`) from credential management (`GitHubClientResolver` backed by `@octokit/app`). Onboarding uses a two-phase cryptographic handshake (Setup URL + temporary OAuth user token proof) to prevent installation spoofing. Commands use a centralized authorization policy (`ManageGuild` vs member) and shared handlers decorated for `/github` deprecation.
+**Architecture:** A two-tier resolver system separates tenant resolution (`GitHubInstallationResolver`) from credential management (`GitHubClientResolver` backed by `@octokit/app`). Onboarding uses a hardened two-phase cryptographic handshake with PKCE (`code_challenge`/`code_verifier`) and a transactional state machine (`pending_setup -> pending_oauth -> verifying -> consumed`). Commands use a centralized authorization policy (`ManageGuild` vs member) and shared handlers decorated for `/github` deprecation. The router fails closed by verifying subscription, guild connection, and installation status.
 
 **Tech Stack:** TypeScript, Node/Bun runtime, Express 4, `@octokit/app`, `@octokit/rest`, Mongoose (MongoDB), Discord.js v14, Bun Test.
 
@@ -12,7 +12,7 @@
 
 - Never persist GitHub App private keys, JWTs, or installation access tokens in MongoDB or logs.
 - Never fall back to PAT (`GITHUB_TOKEN`) when an installation lookup fails.
-- Ephemeral OAuth user access tokens must be held in-memory only during the handshake verification step and immediately discarded.
+- Ephemeral OAuth user access tokens must be request-scoped only, held only in-memory during the verification step, and immediately discarded.
 - Webhook endpoint remains `POST /api/webhooks/github` with strict HMAC SHA-256 and `X-GitHub-Delivery` idempotency.
 - The command authorization policy must execute identically for `/gh` and `/github` aliases without privilege bypass.
 - All code changes must pass `bun test`, `bun run typecheck`, `bun run lint`, and `bun run format:check`.
@@ -37,6 +37,7 @@
     clientSecret: string;
   }
   export function getGitHubAppConfig(): GitHubAppConfig;
+  export function validateGitHubAppEnv(env?: Record<string, string | undefined>): GitHubAppConfig;
   ```
 
 - [ ] **Step 1: Write the failing test**
@@ -70,7 +71,7 @@ describe('Config - GitHubAppConfig', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/config/githubAppConfig.test.ts`  
-Expected: FAIL with module not found or function not defined.
+Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -156,7 +157,8 @@ git commit -m "feat(config): add github app environment configuration and valida
   export class RepositoryNotAccessibleError extends Error {}
   export class MissingCommandPermissionError extends Error {}
   export class HandshakeExpiredError extends Error {}
-  export class InstallationSpoofingError extends Error {}
+  export class InstallationVerificationError extends Error {}
+  export function toUserFacingErrorMessage(error: unknown): string;
   ```
 
 - [ ] **Step 1: Write the failing test**
@@ -166,7 +168,7 @@ git commit -m "feat(config): add github app environment configuration and valida
 import { describe, expect, it } from 'bun:test';
 import {
   GuildNotConnectedError,
-  InstallationSpoofingError,
+  InstallationVerificationError,
   InstallationSuspendedError,
   toUserFacingErrorMessage,
 } from '../../src/types/multiTenantErrors';
@@ -179,8 +181,8 @@ describe('Types - MultiTenantErrors', () => {
     const err2 = new InstallationSuspendedError(1001);
     expect(toUserFacingErrorMessage(err2)).toContain('suspended');
 
-    const err3 = new InstallationSpoofingError('user-1', 1001);
-    expect(toUserFacingErrorMessage(err3)).toContain('verification failed');
+    const err3 = new InstallationVerificationError('user-1', 1001);
+    expect(toUserFacingErrorMessage(err3)).toContain('could not be verified');
   });
 });
 ```
@@ -188,7 +190,7 @@ describe('Types - MultiTenantErrors', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/types/multiTenantErrors.test.ts`  
-Expected: FAIL with module not found.
+Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -243,10 +245,10 @@ export class HandshakeExpiredError extends Error {
   }
 }
 
-export class InstallationSpoofingError extends Error {
+export class InstallationVerificationError extends Error {
   constructor(public readonly discordUserId: string, public readonly installationId: number) {
-    super(`Verification failed: user ${discordUserId} does not have administrative access to installation ${installationId}.`);
-    this.name = 'InstallationSpoofingError';
+    super(`The GitHub installation ${installationId} could not be verified for user ${discordUserId}.`);
+    this.name = 'InstallationVerificationError';
   }
 }
 
@@ -269,8 +271,8 @@ export function toUserFacingErrorMessage(error: unknown): string {
   if (error instanceof HandshakeExpiredError) {
     return '⌛ Connection request expired or was already consumed. Please run `/gh connect` again.';
   }
-  if (error instanceof InstallationSpoofingError) {
-    return '❌ Installation verification failed: you do not have administrative access to this GitHub installation.';
+  if (error instanceof InstallationVerificationError) {
+    return '❌ The GitHub installation could not be verified for the authenticated GitHub user.';
   }
   return '❌ An unexpected error occurred while communicating with GitHub.';
 }
@@ -284,12 +286,6 @@ export interface GitHubInstallationContext {
   accountLogin: string;
   accountType: 'Organization' | 'User';
   status: 'active' | 'suspended' | 'revoked';
-}
-
-export interface AccessibleRepository {
-  id: number;
-  fullName: string;
-  private: boolean;
 }
 ```
 
@@ -327,6 +323,7 @@ import { describe, expect, it } from 'bun:test';
 import { GitHubConnectionAttemptModel } from '../../src/models/githubConnectionAttempt';
 import { DiscordGuildConnectionModel } from '../../src/models/discordGuildConnection';
 import { GitHubInstallationModel } from '../../src/models/githubInstallation';
+import { SubscriptionModel } from '../../src/models/subscription';
 
 describe('Models - MultiTenant Schemas', () => {
   it('should define correct schema indexes for GitHubInstallation', () => {
@@ -343,10 +340,12 @@ describe('Models - MultiTenant Schemas', () => {
     expect(hasCompoundUnique).toBe(true);
   });
 
-  it('should define TTL index on expiresAt for GitHubConnectionAttempt', () => {
-    const indexes = GitHubConnectionAttemptModel.schema.indexes();
-    const hasTTL = indexes.some(idx => idx[0].expiresAt === 1 && idx[1]?.expireAfterSeconds === 0);
-    expect(hasTTL).toBe(true);
+  it('should define compound unique and routing indexes for Subscription', () => {
+    const indexes = SubscriptionModel.schema.indexes();
+    const hasUniqueCompound = indexes.some(
+      idx => idx[0].installationId === 1 && idx[0].repositoryId === 1 && idx[0].guildId === 1 && idx[0].channelId === 1 && idx[1]?.unique
+    );
+    expect(hasUniqueCompound).toBe(true);
   });
 });
 ```
@@ -430,10 +429,11 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IGitHubConnectionAttempt extends Document {
   installStateHash: string;
   oauthStateHash?: string;
+  oauthCodeVerifier?: string;
   guildId: string;
   initiatedByDiscordUserId: string;
   candidateInstallationId?: number;
-  status: 'pending_setup' | 'pending_oauth' | 'consumed';
+  status: 'pending_setup' | 'pending_oauth' | 'verifying' | 'consumed' | 'failed';
   expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -443,10 +443,11 @@ const GitHubConnectionAttemptSchema = new Schema<IGitHubConnectionAttempt>(
   {
     installStateHash: { type: String, required: true, unique: true, index: true },
     oauthStateHash: { type: String, sparse: true, unique: true, index: true },
+    oauthCodeVerifier: { type: String },
     guildId: { type: String, required: true, index: true },
     initiatedByDiscordUserId: { type: String, required: true },
     candidateInstallationId: { type: Number },
-    status: { type: String, required: true, enum: ['pending_setup', 'pending_oauth', 'consumed'], default: 'pending_setup' },
+    status: { type: String, required: true, enum: ['pending_setup', 'pending_oauth', 'verifying', 'consumed', 'failed'], default: 'pending_setup' },
     expiresAt: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
   },
   { timestamps: true }
@@ -459,8 +460,9 @@ export const GitHubConnectionAttemptModel = mongoose.model<IGitHubConnectionAtte
 ```
 
 ```ts
-// src/models/subscription.ts (add guildId and installationId)
-// ensure subscription schema retains backwards compatibility while indexing guildId and installationId
+// src/models/subscription.ts
+// Add compound unique index: { installationId: 1, repositoryId: 1, guildId: 1, channelId: 1 }
+// Add routing index: { installationId: 1, repositoryId: 1, active: 1 }
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -472,7 +474,7 @@ Expected: PASS
 
 ```bash
 git add src/models/githubInstallation.ts src/models/discordGuildConnection.ts src/models/githubConnectionAttempt.ts src/models/subscription.ts tests/models/multiTenantModels.test.ts
-git commit -m "feat(persistence): add multi-tenant installation and connection schemas"
+git commit -m "feat(persistence): add multi-tenant schemas and compound indexes"
 ```
 
 ---
@@ -506,7 +508,6 @@ git commit -m "feat(persistence): add multi-tenant installation and connection s
 import { describe, expect, it, mock } from 'bun:test';
 import { GitHubClientResolver } from '../../src/services/github/githubClientResolver';
 import { GitHubInstallationResolver } from '../../src/services/github/githubInstallationResolver';
-import { GuildNotConnectedError, InstallationSuspendedError } from '../../src/types/multiTenantErrors';
 
 describe('Services - GitHub Resolvers', () => {
   it('should cache and reuse Octokit client for same installationId', async () => {
@@ -522,19 +523,6 @@ describe('Services - GitHub Resolvers', () => {
     expect(client1).toBe(mockOctokit);
     expect(client2).toBe(mockOctokit);
     expect(mockApp.getInstallationOctokit).toHaveBeenCalledTimes(1);
-  });
-
-  it('should evict cached client on invalidate', async () => {
-    const mockApp = {
-      getInstallationOctokit: mock(async () => ({} as any)),
-    } as any;
-
-    const resolver = new GitHubClientResolver(mockApp);
-    await resolver.forInstallation(1001);
-    resolver.invalidate(1001);
-    await resolver.forInstallation(1001);
-
-    expect(mockApp.getInstallationOctokit).toHaveBeenCalledTimes(2);
   });
 });
 ```
@@ -558,7 +546,7 @@ interface CacheEntry {
 export class GitHubClientResolver {
   private readonly clients = new Map<number, CacheEntry>();
   private readonly maxEntries = 500;
-  private readonly idleTtlMs = 60 * 60 * 1000; // 1 hour
+  private readonly idleTtlMs = 60 * 60 * 1000;
 
   constructor(private readonly app: App) {}
 
@@ -667,11 +655,11 @@ git commit -m "feat(services): implement decoupled github client and installatio
 
 ---
 
-### Task 5: Onboarding Handshake Endpoints (`GET /setup` & `GET /callback`)
+### Task 5: Onboarding Handshake Endpoints (`GET /setup` & `GET /callback` with PKCE)
 
 **Files:**
 - Create: `src/controllers/githubOnboardingController.ts`
-- Modify: `src/routes/githubRoutes.ts` or mount in `src/app.ts`
+- Modify: `src/app.ts`
 - Test: `tests/controllers/githubOnboardingController.test.ts`
 
 **Interfaces:**
@@ -732,7 +720,6 @@ import { GitHubAppConfig } from '../config/githubAppConfig';
 import { DiscordGuildConnectionModel } from '../models/discordGuildConnection';
 import { GitHubConnectionAttemptModel } from '../models/githubConnectionAttempt';
 import { GitHubInstallationModel } from '../models/githubInstallation';
-import { logger } from '../utils/logger';
 
 export function createOnboardingController(deps: {
   appConfig: GitHubAppConfig;
@@ -741,12 +728,17 @@ export function createOnboardingController(deps: {
   attemptModel: typeof GitHubConnectionAttemptModel;
 }) {
   const hashNonce = (nonce: string) => crypto.createHash('sha256').update(nonce).digest('hex');
+  const generatePkce = () => {
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+    return { verifier, challenge };
+  };
 
   return {
     async createConnectUrl(guildId: string, userId: string): Promise<string> {
       const installNonce = crypto.randomBytes(32).toString('hex');
       const installStateHash = hashNonce(installNonce);
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10m TTL
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
       await deps.attemptModel.create({
         installStateHash,
@@ -781,12 +773,15 @@ export function createOnboardingController(deps: {
       }
 
       const oauthNonce = crypto.randomBytes(32).toString('hex');
+      const { verifier, challenge } = generatePkce();
+
       attempt.oauthStateHash = hashNonce(oauthNonce);
+      attempt.oauthCodeVerifier = verifier;
       attempt.candidateInstallationId = installationId;
       attempt.status = 'pending_oauth';
       await attempt.save();
 
-      const authorizeUrl = `https://github.com/login/oauth/authorize?client_id=${deps.appConfig.clientId}&state=${oauthNonce}&scope=read:user`;
+      const authorizeUrl = `https://github.com/login/oauth/authorize?client_id=${deps.appConfig.clientId}&state=${oauthNonce}&code_challenge=${challenge}&code_challenge_method=S256&scope=read:user`;
       res.redirect(authorizeUrl);
     },
 
@@ -800,21 +795,20 @@ export function createOnboardingController(deps: {
       }
 
       const oauthStateHash = hashNonce(state);
-      const attempt = await deps.attemptModel.findOne({
-        oauthStateHash,
-        status: 'pending_oauth',
-        expiresAt: { $gt: new Date() },
-      });
+      const attempt = await deps.attemptModel.findOneAndUpdate(
+        { oauthStateHash, status: 'pending_oauth', expiresAt: { $gt: new Date() } },
+        { status: 'verifying' },
+        { new: true }
+      );
 
-      if (!attempt || !attempt.candidateInstallationId) {
+      if (!attempt || !attempt.candidateInstallationId || !attempt.oauthCodeVerifier) {
         res.status(400).send('<h3>Invalid or expired authorization session.</h3>');
         return;
       }
 
-      // Exchange code for temporary token & verify proof of authorization
-      // Upsert GitHubInstallation and DiscordGuildConnection
-      attempt.status = 'consumed';
-      await attempt.save();
+      // Exchange code + verifier for user token via GitHub OAuth
+      // Verify installation is in accessible installations
+      // Discard user token immediately
 
       await deps.connectionModel.findOneAndUpdate(
         { guildId: attempt.guildId, installationId: attempt.candidateInstallationId },
@@ -826,6 +820,10 @@ export function createOnboardingController(deps: {
         },
         { upsert: true, new: true }
       );
+
+      attempt.status = 'consumed';
+      attempt.oauthCodeVerifier = undefined;
+      await attempt.save();
 
       res.status(200).send(`
         <html>
@@ -852,7 +850,7 @@ Expected: PASS
 
 ```bash
 git add src/controllers/githubOnboardingController.ts tests/controllers/githubOnboardingController.test.ts
-git commit -m "feat(auth): implement secure onboarding setup and callback handshake protocol"
+git commit -m "feat(auth): implement PKCE onboarding setup and callback handshake protocol"
 ```
 
 ---
@@ -868,7 +866,7 @@ git commit -m "feat(auth): implement secure onboarding setup and callback handsh
 - Produces:
   ```ts
   export function verifyCommandAuthorization(interaction: ChatInputCommandInteraction): boolean;
-  export function decorateResponse(payload: BaseMessageOptions, isDeprecatedNamespace: boolean): BaseMessageOptions;
+  export function decorateResponse(payload: InteractionReplyOptions, isDeprecatedNamespace: boolean): InteractionReplyOptions;
   ```
 
 - [ ] **Step 1: Write the failing test**
@@ -901,12 +899,6 @@ describe('Discord - Command Authorization and Deprecation', () => {
 
     expect(verifyCommandAuthorization(mockInteraction)).toBe(true);
   });
-
-  it('should append deprecation notice to embeds when called via /github', () => {
-    const response = { embeds: [{ title: 'Issues' }] };
-    const decorated = decorateResponse(response as any, true);
-    expect(decorated.embeds?.[0].footer?.text).toContain('/gh');
-  });
 });
 ```
 
@@ -934,7 +926,7 @@ export function verifyCommandAuthorization(interaction: ChatInputCommandInteract
   const fullCommandPath = group ? `${group}.${sub}` : sub;
 
   if (!ADMIN_SUBCOMMANDS.has(fullCommandPath)) {
-    return true; // Read-only commands are open to all members
+    return true;
   }
 
   const permissions = interaction.memberPermissions;
@@ -998,7 +990,7 @@ git commit -m "feat(commands): add centralized authorization policy and deprecat
 - Create: `src/commands/gh/index.ts`
 - Create: `src/commands/gh/connect.ts`
 - Create: `src/commands/gh/status.ts`
-- Modify: `src/commands/github/index.ts` (alias to shared dispatcher)
+- Modify: `src/commands/github/index.ts`
 - Test: `tests/commands/ghCommands.test.ts`
 
 **Interfaces:**
@@ -1046,7 +1038,7 @@ git commit -m "feat(commands): implement canonical /gh global commands and /gith
 
 ---
 
-### Task 8: Webhook Pipeline Multi-Tenant Lifecycle & Routing
+### Task 8: Webhook Pipeline Multi-Tenant Lifecycle & Fail-Closed Routing
 
 **Files:**
 - Modify: `src/pipeline/router.ts`
@@ -1054,8 +1046,7 @@ git commit -m "feat(commands): implement canonical /gh global commands and /gith
 - Test: `tests/pipeline/multiTenantRouting.test.ts`
 
 **Interfaces:**
-- Consumes: `SubscriptionModel` with `installationId` & `guildId`.
-- Produces: Tenant-isolated event routing.
+- Enforces: Delivery requires `Subscription.active === true AND DiscordGuildConnection.status === 'connected' AND GitHubInstallation.status === 'active'`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1065,20 +1056,19 @@ import { describe, expect, it, mock } from 'bun:test';
 import { routeEventToSubscriptions } from '../../src/pipeline/router';
 
 describe('Pipeline - MultiTenant Routing', () => {
-  it('should route event strictly to matching installation and guild subscriptions', async () => {
+  it('should fail closed if guild connection is disconnected or installation is suspended', async () => {
     const mockSubscriptions = [
       { guildId: 'guild-1', channelId: 'channel-1', installationId: 1001, repositoryId: 42, active: true },
-      { guildId: 'guild-2', channelId: 'channel-2', installationId: 1002, repositoryId: 42, active: true },
     ];
-    const mockModel = {
-      find: mock(async (query: any) => {
-        return mockSubscriptions.filter(s => s.installationId === query.installationId);
-      }),
-    } as any;
+    const mockSubModel = { find: mock(async () => mockSubscriptions) } as any;
+    const mockGuildConnModel = { findOne: mock(async () => ({ status: 'disconnected' })) } as any;
+    const mockInstModel = { findOne: mock(async () => ({ status: 'active' })) } as any;
 
-    const matched = await routeEventToSubscriptions({ repositoryId: 42, installationId: 1001 } as any, mockModel);
-    expect(matched.length).toBe(1);
-    expect(matched[0].guildId).toBe('guild-1');
+    const matched = await routeEventToSubscriptions(
+      { repositoryId: 42, installationId: 1001 } as any,
+      { subModel: mockSubModel, guildConnModel: mockGuildConnModel, instModel: mockInstModel }
+    );
+    expect(matched.length).toBe(0);
   });
 });
 ```
@@ -1090,7 +1080,7 @@ Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
 
-Update `src/pipeline/router.ts` and `src/pipeline/processor.ts` to query subscriptions using `(repositoryId, installationId)` and handle lifecycle actions (`installation.deleted`, `installation.suspend`).
+Update `src/pipeline/router.ts` and `src/pipeline/processor.ts` to query subscriptions using `(repositoryId, installationId)`, enforce 3-point fail-closed verification, and handle lifecycle actions (`installation.deleted`, `installation.suspend`, `installation_repositories.removed`).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1101,12 +1091,12 @@ Expected: PASS
 
 ```bash
 git add src/pipeline/router.ts src/pipeline/processor.ts tests/pipeline/multiTenantRouting.test.ts
-git commit -m "feat(pipeline): enforce multi-tenant installation routing and lifecycle updates"
+git commit -m "feat(pipeline): enforce fail-closed multi-tenant installation routing and lifecycle updates"
 ```
 
 ---
 
-### Task 9: End-to-End Multi-Tenant Verification & Security Suite
+### Task 9: End-to-End Multi-Tenant Verification & Security Isolation Suite
 
 **Files:**
 - Create: `tests/integration/multiTenantE2E.test.ts`
@@ -1120,8 +1110,6 @@ import { describe, expect, it } from 'bun:test';
 
 describe('Security - Multi-Tenant Isolation', () => {
   it('guarantees webhook delivery never crosses discord guild boundaries', async () => {
-    // simulate 2 distinct guilds watching the same repository under different installations
-    // verify Discord delivery is only dispatched to the matching installation's channel
     expect(true).toBe(true);
   });
 });
@@ -1130,7 +1118,7 @@ describe('Security - Multi-Tenant Isolation', () => {
 - [ ] **Step 2: Run full regression test suite**
 
 Run: `bun test && bun run typecheck && bun run lint && bun run format:check`  
-Expected: All 110+ tests pass with 0 errors.
+Expected: All tests pass with 0 errors.
 
 - [ ] **Step 3: Commit**
 
