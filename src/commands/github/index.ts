@@ -127,12 +127,12 @@ export const github = {
         ),
 
     async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-        let authMode = 'github_app';
+        let authMode: 'github_app' | 'legacy_pat' = 'github_app';
         try {
             const env = validateEnv();
             authMode = env.authMode;
         } catch {
-            authMode = 'github_app';
+            authMode = process.env.GITHUB_TOKEN && !process.env.GITHUB_APP_ID ? 'legacy_pat' : 'github_app';
         }
 
         if (authMode === 'github_app') {

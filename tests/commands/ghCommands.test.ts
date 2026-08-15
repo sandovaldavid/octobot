@@ -443,6 +443,7 @@ describe('Commands - Global /gh Surface & /github Deprecated Alias', () => {
                 process.env.DISCORD_CLIENT_ID = '123456789012345678';
                 process.env.DISCORD_GUILD_ID = '987654321098765432';
                 process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
+                process.env.API_URL = 'https://octobot.test';
                 process.env.GITHUB_TOKEN = 'ghp_legacy_test_token';
                 process.env.GITHUB_OWNER = 'octo-org';
                 process.env.GITHUB_WEBHOOK_SECRET = 'secret';
