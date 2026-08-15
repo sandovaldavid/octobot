@@ -72,7 +72,7 @@ graph TD
     DiscordClient -->|Manage Subscriptions| Subs
 ```
 
-### Datos Persistidos en MongoDB (`RepositorySubscription` y `WorkflowAlertState`)
+### Datos Persistidos en MongoDB (`RepositorySubscription`, `WorkflowAlertState` y `WebhookDelivery`)
 
 MongoDB almacena **únicamente datos operativos propiedad de OctoBot**:
 
@@ -86,10 +86,18 @@ MongoDB almacena **únicamente datos operativos propiedad de OctoBot**:
     - `createdAt`, `updatedAt`: Marcas temporales.
 
 - `WorkflowAlertState`:
+
     - `repositoryFullName`, `workflowId`, `headBranch`: Clave única compuesta para seguimiento de salud de CI.
     - `state`: Estado actual (`healthy` | `failing`).
     - `lastRunId`, `lastRunNumber`, `lastRunAttempt`: Identificadores para deduplicación y protección contra entregas fuera de orden.
     - `lastFailureRunId`, `lastFailureAt`: Metadatos del último fallo registrado.
+
+- `WebhookDelivery` (Idempotencia y Protección Replay):
+    - `deliveryId`: GUID global único de entrega de GitHub (`X-GitHub-Delivery`).
+    - `eventName`: Nombre del evento de transporte.
+    - `status`: Estado del ciclo de vida (`processing` | `completed` | `rejected` | `retryable_failed`).
+    - `leaseExpiresAt`: Lease de procesamiento (60 segundos) para recuperación atómica segura ante caídas.
+    - `expiresAt`: Retención de 7 días mediante índice TTL de MongoDB (`expireAfterSeconds: 0`).
 
 ---
 
