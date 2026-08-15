@@ -37,6 +37,9 @@ export const webhookController = {
                     login: 'test-user',
                     avatar_url: 'https://github.com/user.png',
                 },
+                pusher: {
+                    name: 'test-user',
+                },
                 commits: [
                     {
                         id: 'abc123',

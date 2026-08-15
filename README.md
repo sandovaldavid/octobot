@@ -62,45 +62,49 @@ graph TD
 ## 🚀 Instalación y Configuración
 
 1. **Clonar el repositorio:**
-   ```bash
-   git clone https://github.com/sandovaldavid/octobot.git
-   cd octobot
-   ```
+
+    ```bash
+    git clone https://github.com/sandovaldavid/octobot.git
+    cd octobot
+    ```
 
 2. **Instalar dependencias:**
-   ```bash
-   bun install
-   ```
+
+    ```bash
+    bun install
+    ```
 
 3. **Configurar variables de entorno:**
-   ```bash
-   cp .env.example .env
-   ```
+
+    ```bash
+    cp .env.example .env
+    ```
 
 4. **Variables requeridas en `.env`:**
-   ```env
-   PORT=1234
-   NODE_ENV=development
 
-   # Discord
-   DISCORD_TOKEN=your_discord_bot_token
-   DISCORD_CHANNEL_ID=your_default_channel_id
-   DISCORD_GUILD_ID=your_guild_id
-   DISCORD_CLIENT_ID=your_client_id
+    ```env
+    PORT=1234
+    NODE_ENV=development
 
-   # MongoDB
-   MONGO_USER=dev-octobot
-   MONGO_PASSWORD=your_password
-   MONGO_DATABASE=db-octobot
-   MONGODB_URI=mongodb://dev-octobot:your_password@localhost:27017/db-octobot?authSource=admin
+    # Discord
+    DISCORD_TOKEN=your_discord_bot_token
+    DISCORD_CHANNEL_ID=your_default_channel_id
+    DISCORD_GUILD_ID=your_guild_id
+    DISCORD_CLIENT_ID=your_client_id
 
-   # GitHub
-   GITHUB_TOKEN=your_github_personal_access_token
-   GITHUB_OWNER=your_github_username_or_org
-   GITHUB_REPO=your_default_repo
-   GITHUB_WEBHOOK_SECRET=your_webhook_secret_key
-   API_URL=https://your-public-webhook-url.ngrok-free.app
-   ```
+    # MongoDB
+    MONGO_USER=dev-octobot
+    MONGO_PASSWORD=your_password
+    MONGO_DATABASE=db-octobot
+    MONGODB_URI=mongodb://dev-octobot:your_password@localhost:27017/db-octobot?authSource=admin
+
+    # GitHub
+    GITHUB_TOKEN=your_github_personal_access_token
+    GITHUB_OWNER=your_github_username_or_org
+    GITHUB_REPO=your_default_repo
+    GITHUB_WEBHOOK_SECRET=your_webhook_secret_key
+    API_URL=https://your-public-webhook-url.ngrok-free.app
+    ```
 
 ---
 
@@ -108,27 +112,30 @@ graph TD
 
 Todos los comandos están agrupados bajo `/github`:
 
-| Grupo | Comando | Parámetros | Descripción |
-|---|---|---|---|
-| `repo` | `/github repo watch` | `name:<repo>` (requerido) | Configura el webhook en GitHub y envía alertas al canal de Discord actual. |
-| `repo` | `/github repo unwatch` | `name:<repo>` (requerido) | Elimina el webhook en GitHub y desactiva el monitoreo. |
-| `repo` | `/github repo sync` | Ninguno | Sincroniza todos los repositorios de GitHub con MongoDB. |
-| `repo` | `/github repo check-webhook` | `name:<repo>` (requerido) | Verifica si el webhook está activo y configurado. |
-| `issues` | `/github issues list` | `state:[open\|closed\|all]`, `repo:[nombre]` | Lista issues interactivos con botones de paginación previa/siguiente. |
+| Grupo    | Comando                      | Parámetros                                   | Descripción                                                                |
+| -------- | ---------------------------- | -------------------------------------------- | -------------------------------------------------------------------------- |
+| `repo`   | `/github repo watch`         | `name:<repo>` (requerido)                    | Configura el webhook en GitHub y envía alertas al canal de Discord actual. |
+| `repo`   | `/github repo unwatch`       | `name:<repo>` (requerido)                    | Elimina el webhook en GitHub y desactiva el monitoreo.                     |
+| `repo`   | `/github repo sync`          | Ninguno                                      | Sincroniza todos los repositorios de GitHub con MongoDB.                   |
+| `repo`   | `/github repo check-webhook` | `name:<repo>` (requerido)                    | Verifica si el webhook está activo y configurado.                          |
+| `issues` | `/github issues list`        | `state:[open\|closed\|all]`, `repo:[nombre]` | Lista issues interactivos con botones de paginación previa/siguiente.      |
 
 ---
 
 ## 🌐 API REST
 
 ### Estado del Sistema
+
 - `GET /health` - Retorna el estado de conexión de Discord, Webhooks y MongoDB.
 
 ### Webhooks
+
 - `POST /api/webhooks/github` - Receptor principal de eventos webhook de GitHub (con validación de firma HMAC SHA-256).
 - `POST /api/webhooks/github/test` - Endpoint de prueba para simular un webhook push.
 - `POST /api/webhooks/github/repository/:repoName` - Configuración automática de webhook para un repositorio.
 
 ### Repositorios
+
 - `GET /api/repositories/github` - Lista repositorios directamente desde GitHub.
 - `GET /api/repositories/stored` - Lista repositorios persistidos en MongoDB.
 - `POST /api/repositories/sync` - Sincroniza repositorios desde GitHub hacia MongoDB.
@@ -136,6 +143,7 @@ Todos los comandos están agrupados bajo `/github`:
 - `GET /api/repositories/search?query=...` - Búsqueda de repositorios por nombre o descripción.
 
 ### Issues
+
 - `GET /api/issues` - Consulta de issues con filtros (`state`, `labels`, `since`, `page`, `per_page`).
 - `GET /api/issues/:issueNumber?repo=...` - Consulta de un issue específico por número.
 - `GET /api/issues/repository/:repoName` - Consulta de issues asociados a un repositorio.
@@ -186,6 +194,7 @@ bun test
 ```
 
 Ubicación de tests:
+
 - `tests/utils/validators.test.ts`
 - `tests/services/discordService.test.ts`
 - `tests/services/repositoryService.test.ts`

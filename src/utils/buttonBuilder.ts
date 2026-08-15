@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import { PaginationOptions } from '@/interfaces/discord/interfaces';
 import { CommandConfig } from '@config/commandConfig';
 

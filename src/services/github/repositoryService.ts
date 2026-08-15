@@ -145,7 +145,6 @@ export const repositoryService = {
     async createRepository(options: CreateRepositoryOptions): Promise<GithubApiResponse<GithubRepository>> {
         try {
             const octokit = githubClient.getOctokit();
-            const config = githubClient.getConfig();
 
             const { data } = await octokit.rest.repos.createForAuthenticatedUser({
                 name: options.name,
@@ -194,7 +193,7 @@ export const repositoryService = {
                 },
             };
 
-            const savedRepo = await RepositoryModel.create(repositoryData);
+            await RepositoryModel.create(repositoryData);
 
             return {
                 success: true,
@@ -214,7 +213,7 @@ export const repositoryService = {
             const octokit = githubClient.getOctokit();
             const config = githubClient.getConfig();
 
-            const { data } = await octokit.rest.repos.update({
+            await octokit.rest.repos.update({
                 owner: config.owner,
                 repo: repoName,
                 name: options.name || repoName,
@@ -248,7 +247,7 @@ export const repositoryService = {
                 updatedAt: new Date(),
             };
 
-            const savedRepo = await RepositoryModel.findOneAndUpdate({ githubId: updatedRepo.id }, repositoryData, {
+            await RepositoryModel.findOneAndUpdate({ githubId: updatedRepo.id }, repositoryData, {
                 new: true,
             });
 
