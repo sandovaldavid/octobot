@@ -175,13 +175,13 @@ Al configurar `GITHUB_TOKEN`, utiliza el token más acotado que soporte los repo
 
 Todos los comandos están agrupados bajo `/github`:
 
-| Grupo    | Comando                      | Parámetros                                     | Descripción                                                                |
-| -------- | ---------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------- |
-| `repo`   | `/github repo watch`         | `name:<repo>` (requerido)                      | Configura el webhook y asocia el repositorio al canal actual.              |
-| `repo`   | `/github repo unwatch`       | `name:<repo>` (requerido)                      | Elimina el webhook y desactiva el monitoreo.                               |
-| `repo`   | `/github repo sync`          | Ninguno                                        | Sincronización interna heredada con MongoDB; pendiente de revisión V1.     |
-| `repo`   | `/github repo check-webhook` | `name:<repo>` (requerido)                      | Verifica si el webhook del repositorio está configurado.                   |
-| `issues` | `/github issues list`        | `state:[open\|closed\|all]`, `repo:[nombre]` | Lista issues mediante navegación interactiva.                              |
+| Grupo    | Comando                      | Parámetros                                   | Descripción                                                            |
+| -------- | ---------------------------- | -------------------------------------------- | ---------------------------------------------------------------------- |
+| `repo`   | `/github repo watch`         | `name:<repo>` (requerido)                    | Configura el webhook y asocia el repositorio al canal actual.          |
+| `repo`   | `/github repo unwatch`       | `name:<repo>` (requerido)                    | Elimina el webhook y desactiva el monitoreo.                           |
+| `repo`   | `/github repo sync`          | Ninguno                                      | Sincronización interna heredada con MongoDB; pendiente de revisión V1. |
+| `repo`   | `/github repo check-webhook` | `name:<repo>` (requerido)                    | Verifica si el webhook del repositorio está configurado.               |
+| `issues` | `/github issues list`        | `state:[open\|closed\|all]`, `repo:[nombre]` | Lista issues mediante navegación interactiva.                          |
 
 Los comandos administrativos de repositorio requieren permisos de Discord `Administrator` o `ManageGuild` según la implementación actual.
 
