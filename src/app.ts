@@ -1,6 +1,5 @@
 import cors from 'cors';
 import express from 'express';
-import issueRoutes from '@routes/issueRoutes';
 import webhookRoutes from '@routes/webhookRoutes';
 
 interface AppDependencies {
@@ -23,8 +22,7 @@ export function createApp({ client, webhookConnected, databaseConnected = true }
         })
     );
 
-    // Public HTTP surface intentionally excludes repository administration.
-    app.use('/api/issues', issueRoutes);
+    // Public HTTP surface: webhook ingress and health check
     app.use('/api/webhooks', webhookRoutes);
 
     app.get('/health', (_req, res) => {

@@ -1,9 +1,9 @@
-import { WebhookModel } from '@models/webhook';
-import { RepositoryModel } from '@models/repository';
+import { RepositorySubscriptionModel } from '@models/subscription';
 import { discordService } from '@services/discordService';
 import { debug } from '@utils/logger';
 import { DiscordColors } from '@/types/discord';
 import { Payload, Commit, IssuePayload, ReleasePayload, PullRequestPayload, Release } from '@/types/github';
+import { WebhookEventType } from '@/types/webhook';
 
 // Event handlers
 const handlers = {
@@ -13,38 +13,39 @@ const handlers = {
     release: handleReleaseEvent,
     create: handleCreateEvent,
     delete: handleDeleteEvent,
-    // workflow_run: handleWorkflowRunEvent,
-    // workflow_job: handleWorkflowJobEvent,
-    // check_run: handleCheckRunEvent,
-    // deployment: handleDeploymentEvent,
-    // deployment_status: handleDeploymentStatusEvent,
-    // status: handleStatusEvent,
 };
 
 export const handleGithubWebhook = async (event: string, payload: Payload) => {
     try {
-        await WebhookModel.create({
-            type: event,
-            repositoryName: payload.repository.full_name,
-            payload,
+        const handler = handlers[event as keyof typeof handlers];
+        if (!handler) {
+            debug.warn(`No handler found for event type: ${event}`);
+            return;
+        }
+
+        const fullName = payload.repository.full_name?.toLowerCase();
+        const shortName = payload.repository.name?.toLowerCase();
+
+        // Find all active subscriptions for this repository
+        const candidateNames = [fullName, shortName].filter(Boolean) as string[];
+        const subscriptions = await RepositorySubscriptionModel.find({
+            repositoryFullName: { $in: candidateNames },
+            active: true,
         });
 
-        const handler = handlers[event as keyof typeof handlers];
-        if (handler) {
-            const repository = await RepositoryModel.findOne({
-                name: payload.repository.name,
-            });
+        if (subscriptions.length === 0) {
+            debug.warn(`No active subscriptions found for repository: ${payload.repository.full_name}`);
+            return;
+        }
 
-            if (repository?.webhookSettings?.channelId) {
-                await handler(repository.webhookSettings.channelId, payload);
+        for (const sub of subscriptions) {
+            // Check if subscription filters for this event (or if all events subscribed)
+            if (!sub.events || sub.events.length === 0 || sub.events.includes(event as WebhookEventType)) {
+                await handler(sub.channelId, payload);
                 debug.info(
-                    `Processed ${event} webhook for ${payload.repository.full_name} in channel ${repository.webhookSettings.channelId}`
+                    `Processed ${event} webhook for ${payload.repository.full_name} in channel ${sub.channelId}`
                 );
-            } else {
-                debug.warn(`No channel configured for repository ${payload.repository.name}`);
             }
-        } else {
-            debug.warn(`No handler found for event type: ${event}`);
         }
     } catch (error) {
         debug.error('Error handling webhook:', error);

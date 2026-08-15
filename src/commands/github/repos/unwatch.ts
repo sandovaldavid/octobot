@@ -1,5 +1,5 @@
 import { ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
-import { RepositoryModel } from '@models/repository';
+import { RepositorySubscriptionModel } from '@models/subscription';
 import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
 import { createCommand } from '@utils/commandBuilder';
@@ -12,7 +12,7 @@ export const unwatch = createCommand({
         description: 'Repository management commands',
         subcommand: {
             name: 'unwatch',
-            description: 'Stop watching a GitHub repository',
+            description: 'Stop watching a GitHub repository in this channel',
             options: [
                 {
                     name: 'name',
@@ -40,32 +40,42 @@ export const unwatch = createCommand({
 
             await interaction.deferReply();
             const repoName = interaction.options.getString('name', true);
+            const channelId = interaction.channelId;
 
-            debug.info(`Attempting to unwatch repository: ${repoName}`);
+            debug.info(`Attempting to unwatch repository: ${repoName} in channel: ${channelId}`);
 
-            const repository = await RepositoryModel.findOne({ name: repoName });
-            if (!repository) {
-                await interaction.editReply(`❌ Repository \`${repoName}\` is not being watched`);
+            const subscription = await RepositorySubscriptionModel.findOne({
+                repositoryFullName: repoName.toLowerCase(),
+                channelId,
+                active: true,
+            });
+
+            if (!subscription) {
+                await interaction.editReply(`❌ Repository \`${repoName}\` is not being watched in <#${channelId}>.`);
                 return;
             }
 
-            // Remove webhook from GitHub
-            const unwatchResult = await webhookService.removeWebhook(repoName);
-            if (!unwatchResult.success) {
-                debug.error(`Failed to remove webhook: ${unwatchResult.error}`);
+            // Remove subscription from database
+            await RepositorySubscriptionModel.deleteOne({
+                repositoryFullName: repoName.toLowerCase(),
+                channelId,
+            });
+
+            // If no other active channels subscribe to this repository, remove webhook from GitHub
+            const remainingSubs = await RepositorySubscriptionModel.countDocuments({
+                repositoryFullName: repoName.toLowerCase(),
+                active: true,
+            });
+
+            if (remainingSubs === 0) {
+                const unwatchResult = await webhookService.removeWebhook(repoName);
+                if (!unwatchResult.success) {
+                    debug.warn(`Note: Could not remove remote webhook from GitHub: ${unwatchResult.error}`);
+                }
             }
 
-            // Update database
-            await RepositoryModel.findOneAndUpdate(
-                { name: repoName },
-                {
-                    webhookActive: false,
-                    $unset: { webhookSettings: '' },
-                }
-            );
-
-            debug.info(`Successfully unwatched repository ${repoName}`);
-            await interaction.editReply(`✅ Stopped watching \`${repoName}\``);
+            debug.info(`Successfully unwatched repository ${repoName} in channel ${channelId}`);
+            await interaction.editReply(`✅ Stopped watching \`${repoName}\` in <#${channelId}>`);
         } catch (error) {
             debug.error('Error in unwatch command:', error);
             const errorMessage = '❌ Failed to unwatch repository. Please try again later.';

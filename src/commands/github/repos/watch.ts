@@ -1,5 +1,5 @@
 import { ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
-import { RepositoryModel } from '@models/repository';
+import { RepositorySubscriptionModel } from '@models/subscription';
 import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
 import { createCommand } from '@utils/commandBuilder';
@@ -13,11 +13,11 @@ export const watch = createCommand({
         description: 'Repository management commands',
         subcommand: {
             name: 'watch',
-            description: 'Watch a GitHub repository',
+            description: 'Watch a GitHub repository and route notifications to this channel',
             options: [
                 {
                     name: 'name',
-                    description: 'Name of the repository to watch',
+                    description: 'Name of the repository to watch (e.g. owner/repo or repo)',
                     type: 'string',
                     required: true,
                 },
@@ -42,6 +42,7 @@ export const watch = createCommand({
             await interaction.deferReply();
             const repoName = interaction.options.getString('name', true);
             const channelId = interaction.channelId;
+            const guildId = interaction.guildId || undefined;
 
             debug.info(`Attempting to watch repository: ${repoName} in channel: ${channelId}`);
 
@@ -57,19 +58,22 @@ export const watch = createCommand({
                 return;
             }
 
-            await RepositoryModel.findOneAndUpdate(
-                { name: repoName },
+            await RepositorySubscriptionModel.findOneAndUpdate(
                 {
-                    webhookActive: true,
-                    webhookSettings: {
-                        events: WEBHOOK_EVENTS,
-                        channelId: channelId,
-                    },
+                    repositoryFullName: repoName.toLowerCase(),
+                    channelId: channelId,
                 },
-                { upsert: true }
+                {
+                    repositoryFullName: repoName.toLowerCase(),
+                    guildId,
+                    channelId,
+                    events: WEBHOOK_EVENTS,
+                    active: true,
+                },
+                { upsert: true, new: true }
             );
 
-            debug.info(`Successfully configured webhook for ${repoName} in channel ${channelId}`);
+            debug.info(`Successfully configured subscription for ${repoName} in channel ${channelId}`);
             await interaction.editReply(`✅ Now watching \`${repoName}\` for updates in <#${channelId}>`);
         } catch (error) {
             debug.error('Error in watch command:', error);
