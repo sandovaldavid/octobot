@@ -4,6 +4,7 @@ import {
     NormalizedPullRequestEvent,
     NormalizedPullRequestReviewEvent,
     NormalizedPushEvent,
+    NormalizedWorkflowRunEvent,
 } from '../../src/pipeline/types';
 
 describe('Pipeline - Notification Policy', () => {
@@ -101,6 +102,33 @@ describe('Pipeline - Notification Policy', () => {
         expect(NotificationPolicy.shouldNotify(baseReview).notify).toBe(false);
         expect(NotificationPolicy.shouldNotify({ ...baseReview, action: 'edited' }).notify).toBe(false);
         expect(NotificationPolicy.shouldNotify({ ...baseReview, action: 'dismissed' }).notify).toBe(false);
+    });
+
+    it('debe aprobar workflow_run solo si completed y alertType es failure o recovery', () => {
+        const baseWf: NormalizedWorkflowRunEvent = {
+            type: 'workflow_run',
+            repositoryFullName: 'sandovaldavid/octobot',
+            action: 'completed',
+            workflowId: 100,
+            workflowName: 'CI',
+            headBranch: 'develop',
+            headSha: 'abcdef1',
+            runId: 1001,
+            runNumber: 1,
+            runAttempt: 1,
+            conclusion: 'failure',
+            htmlUrl: 'https://github.com',
+            senderLogin: 'dev',
+            senderAvatar: '',
+            alertType: 'failure',
+        };
+
+        expect(NotificationPolicy.shouldNotify({ ...baseWf, alertType: 'failure' }).notify).toBe(true);
+        expect(NotificationPolicy.shouldNotify({ ...baseWf, alertType: 'recovery' }).notify).toBe(true);
+        expect(NotificationPolicy.shouldNotify({ ...baseWf, alertType: 'none' }).notify).toBe(false);
+        expect(NotificationPolicy.shouldNotify({ ...baseWf, action: 'in_progress', alertType: 'failure' }).notify).toBe(
+            false
+        );
     });
 
     it('debe aprobar eventos push, issues, release, create, delete', () => {

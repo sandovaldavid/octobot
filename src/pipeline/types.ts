@@ -42,6 +42,10 @@ export type PullRequestReviewAction = 'submitted' | 'edited' | 'dismissed';
 
 export type ReviewState = 'approved' | 'changes_requested' | 'commented' | 'dismissed';
 
+export type WorkflowRunAction = 'completed' | 'requested' | 'in_progress';
+
+export type WorkflowAlertType = 'failure' | 'recovery' | 'none';
+
 export type IssueAction = 'opened' | 'closed' | 'reopened' | 'labeled' | 'unlabeled' | 'assigned' | 'unassigned';
 
 export type ReleaseAction = 'published' | 'created' | 'edited' | 'deleted' | 'prereleased';
@@ -96,6 +100,25 @@ export interface NormalizedPullRequestReviewEvent {
     body?: string;
     htmlUrl: string;
     submittedAt?: string;
+}
+
+export interface NormalizedWorkflowRunEvent {
+    type: 'workflow_run';
+    repositoryFullName: string;
+    action: WorkflowRunAction;
+    workflowId: number;
+    workflowName: string;
+    headBranch: string;
+    headSha: string;
+    runId: number;
+    runNumber: number;
+    runAttempt: number;
+    conclusion?: string;
+    htmlUrl: string;
+    senderLogin: string;
+    senderAvatar: string;
+    alertType: WorkflowAlertType;
+    previousState?: 'healthy' | 'failing';
 }
 
 export interface NormalizedIssueEvent {
@@ -163,6 +186,7 @@ export type NormalizedGithubEvent =
     | NormalizedPushEvent
     | NormalizedPullRequestEvent
     | NormalizedPullRequestReviewEvent
+    | NormalizedWorkflowRunEvent
     | NormalizedIssueEvent
     | NormalizedReleaseEvent
     | NormalizedBranchCreatedEvent

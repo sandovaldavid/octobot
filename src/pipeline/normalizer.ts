@@ -4,6 +4,7 @@ import {
     NormalizedPushEvent,
     NormalizedPullRequestEvent,
     NormalizedPullRequestReviewEvent,
+    NormalizedWorkflowRunEvent,
     NormalizedIssueEvent,
     NormalizedReleaseEvent,
     NormalizedBranchCreatedEvent,
@@ -13,6 +14,7 @@ import {
     PullRequestAction,
     PullRequestReviewAction,
     ReviewState,
+    WorkflowRunAction,
     IssueAction,
     ReleaseAction,
 } from './types';
@@ -29,6 +31,8 @@ const VALID_PR_ACTIONS: PullRequestAction[] = [
 const VALID_PR_REVIEW_ACTIONS: PullRequestReviewAction[] = ['submitted', 'edited', 'dismissed'];
 
 const VALID_REVIEW_STATES: ReviewState[] = ['approved', 'changes_requested', 'commented', 'dismissed'];
+
+const VALID_WORKFLOW_RUN_ACTIONS: WorkflowRunAction[] = ['completed', 'requested', 'in_progress'];
 
 const VALID_ISSUE_ACTIONS: IssueAction[] = [
     'opened',
@@ -268,6 +272,75 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                     htmlUrl: String(review.html_url || pr.html_url || ''),
                     submittedAt: typeof review.submitted_at === 'string' ? review.submitted_at : undefined,
                 } as NormalizedPullRequestReviewEvent,
+            };
+        }
+
+        case 'workflow_run': {
+            const wf = p.workflow_run;
+            if (!wf || typeof wf !== 'object') {
+                return {
+                    success: false,
+                    reason: 'Missing workflow_run object in workflow_run event',
+                    repositoryFullName: repoFullName,
+                };
+            }
+
+            const rawAction = String(p.action || '');
+            if (!VALID_WORKFLOW_RUN_ACTIONS.includes(rawAction as WorkflowRunAction)) {
+                return {
+                    success: false,
+                    reason: `Unsupported workflow_run action: "${rawAction}"`,
+                    repositoryFullName: repoFullName,
+                };
+            }
+
+            const runId = Number(wf.id);
+            const workflowId = Number(wf.workflow_id || p.workflow?.id || wf.id);
+            const runNumber = Number(wf.run_number || 1);
+            const runAttempt = Number(wf.run_attempt || 1);
+            const headBranch = typeof wf.head_branch === 'string' ? wf.head_branch.trim() : '';
+            const workflowName =
+                typeof wf.name === 'string'
+                    ? wf.name.trim()
+                    : typeof p.workflow?.name === 'string'
+                      ? p.workflow.name.trim()
+                      : 'CI Workflow';
+
+            if (!runId || runId <= 0 || !workflowId || workflowId <= 0) {
+                return {
+                    success: false,
+                    reason: 'Missing or invalid workflow_run id or workflow_id',
+                    repositoryFullName: repoFullName,
+                };
+            }
+
+            if (!headBranch) {
+                return {
+                    success: false,
+                    reason: 'Missing or invalid workflow_run head_branch',
+                    repositoryFullName: repoFullName,
+                };
+            }
+
+            return {
+                success: true,
+                event: {
+                    type: 'workflow_run',
+                    repositoryFullName: repoFullName,
+                    action: rawAction as WorkflowRunAction,
+                    workflowId,
+                    workflowName,
+                    headBranch,
+                    headSha: String(wf.head_sha || ''),
+                    runId,
+                    runNumber,
+                    runAttempt,
+                    conclusion: typeof wf.conclusion === 'string' ? wf.conclusion.toLowerCase() : undefined,
+                    htmlUrl: String(wf.html_url || ''),
+                    senderLogin: String(p.sender?.login || 'ghost'),
+                    senderAvatar: String(p.sender?.avatar_url || ''),
+                    alertType: 'none',
+                } as NormalizedWorkflowRunEvent,
             };
         }
 

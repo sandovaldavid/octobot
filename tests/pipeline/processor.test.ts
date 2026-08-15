@@ -2,6 +2,7 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { EventProcessor } from '../../src/pipeline/processor';
 import { SubscriptionRouter } from '../../src/pipeline/router';
 import { VerifiedGithubDelivery } from '../../src/pipeline/types';
+import { WorkflowStateService } from '../../src/services/workflowStateService';
 
 describe('Pipeline - Event Processor', () => {
     it('debe retornar invalid_payload cuando el payload está malformado', async () => {
@@ -44,6 +45,38 @@ describe('Pipeline - Event Processor', () => {
         expect(result.attempted).toBe(0);
     });
 
+    it('debe evaluar workflow_run y filtrar por política si no hay alerta accionable', async () => {
+        spyOn(WorkflowStateService, 'evaluateTransition').mockResolvedValue({
+            shouldNotify: false,
+            alertType: 'none',
+            reason: 'repeated_failure_suppressed',
+        });
+
+        const delivery: VerifiedGithubDelivery = {
+            deliveryId: 'wf-delivery-1',
+            eventName: 'workflow_run',
+            receivedAt: new Date(),
+            payload: {
+                action: 'completed',
+                repository: { full_name: 'sandovaldavid/octobot' },
+                workflow_run: {
+                    id: 1234,
+                    workflow_id: 10,
+                    name: 'CI',
+                    head_branch: 'develop',
+                    head_sha: 'abc1234',
+                    run_number: 1,
+                    run_attempt: 1,
+                    conclusion: 'failure',
+                },
+            },
+        };
+
+        const result = await EventProcessor.process(delivery);
+        expect(result.outcome).toBe('ignored_policy');
+        expect(result.attempted).toBe(0);
+    });
+
     it('debe retornar ignored_ping para eventos de ping', async () => {
         const delivery: VerifiedGithubDelivery = {
             deliveryId: 'ping-delivery-1',
@@ -61,7 +94,7 @@ describe('Pipeline - Event Processor', () => {
     it('debe retornar ignored_unsupported_event para eventos sin soporte funcional', async () => {
         const delivery: VerifiedGithubDelivery = {
             deliveryId: 'unsupported-delivery-1',
-            eventName: 'workflow_run',
+            eventName: 'deployment',
             receivedAt: new Date(),
             payload: { repository: { full_name: 'sandovaldavid/octobot' } },
         };
