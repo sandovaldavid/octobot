@@ -2,7 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 
 export interface IssueDisplayOptions {
     state: 'open' | 'closed' | 'all';
-    repo?: string;
+    repo: string;
     page: number;
     perPage: number;
     sort?: 'created' | 'updated' | 'comments';
@@ -13,12 +13,15 @@ export interface IssueDisplayResult {
     success: boolean;
     embed: EmbedBuilder;
     buttons?: ActionRowBuilder<ButtonBuilder>;
-    totalPages?: number;
-    totalIssues?: number;
+    page?: number;
+    hasNext?: boolean;
+    hasPrevious?: boolean;
 }
 
 export interface PaginationOptions {
-    currentPage: number;
-    totalPages: number;
+    currentPage?: number;
+    totalPages?: number;
+    hasPrevious?: boolean;
+    hasNext?: boolean;
     isDisabled?: boolean;
 }

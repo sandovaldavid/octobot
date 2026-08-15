@@ -1,64 +1,95 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
-import { RepositoryModel } from '@models/repository';
+import { ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
+import { RepositorySubscriptionModel } from '@models/subscription';
 import { webhookService } from '@services/github/webhookService';
+import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
-import { WEBHOOK_EVENTS } from '../../../types/webhook';
+import { createCommand } from '@utils/commandBuilder';
+import { DEFAULT_SUBSCRIPTION_EVENTS } from '../../../types/webhook';
 
-export const watch = {
-    data: new SlashCommandBuilder()
-        .setName('github')
-        .setDescription('GitHub repository commands')
-        .addSubcommand((subcommand) =>
-            subcommand
-                .setName('watch')
-                .setDescription('Watch a GitHub repository')
-                .addStringOption((option) =>
-                    option.setName('name').setDescription('Name of the repository to watch').setRequired(true)
-                )
-        ),
-
+export const watch = createCommand({
+    name: 'github',
+    description: 'GitHub commands',
+    subcommandGroup: {
+        name: 'repo',
+        description: 'Repository management commands',
+        subcommand: {
+            name: 'watch',
+            description: 'Watch a GitHub repository and route notifications to this channel',
+            options: [
+                {
+                    name: 'name',
+                    description: 'Name of the repository to watch (e.g. owner/repo or repo)',
+                    type: 'string',
+                    required: true,
+                },
+            ],
+        },
+    },
     async execute(interaction: ChatInputCommandInteraction) {
         try {
-            await interaction.deferReply();
-            const repoName = interaction.options.getString('name', true);
-            const channelId = interaction.channelId;
+            const memberPermissions = interaction.memberPermissions;
+            const hasAdminPermission =
+                memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+                memberPermissions?.has(PermissionFlagsBits.ManageGuild);
 
-            debug.info(`Attempting to watch repository: ${repoName} in channel: ${channelId}`);
-
-            const webhookResult = await webhookService.configureWebhook(repoName);
-            if (!webhookResult.success) {
-                const errorMessage = webhookResult.error?.includes('does not exist')
-                    ? `❌ Repository \`${repoName}\` does not exist. Please check the name and try again.`
-                    : webhookResult.error?.includes('permission')
-                      ? `❌ No permission to configure webhooks for \`${repoName}\`. Make sure you have admin access.`
-                      : `❌ Failed to configure webhook: ${webhookResult.error}`;
-
-                return interaction.editReply(errorMessage);
+            if (!hasAdminPermission) {
+                await interaction.reply({
+                    content: '🚫 You need **Administrator** or **Manage Server** permissions to execute this command.',
+                    ephemeral: true,
+                });
+                return;
             }
 
-            await RepositoryModel.findOneAndUpdate(
-                { name: repoName },
+            await interaction.deferReply();
+            const repoInput = interaction.options.getString('name', true).trim();
+            const channelId = interaction.channelId;
+            const guildId = interaction.guildId || undefined;
+
+            const config = githubClient.getConfig();
+            const canonicalFullName = repoInput.includes('/')
+                ? repoInput.toLowerCase()
+                : `${config.owner.toLowerCase()}/${repoInput.toLowerCase()}`;
+
+            debug.info(`Attempting to watch repository: ${canonicalFullName} in channel: ${channelId}`);
+
+            const webhookResult = await webhookService.configureWebhook(canonicalFullName);
+            if (!webhookResult.success) {
+                const errorMessage = webhookResult.error?.includes('does not exist')
+                    ? `❌ Repository \`${canonicalFullName}\` does not exist. Please check the name and try again.`
+                    : webhookResult.error?.includes('permission')
+                      ? `❌ No permission to configure webhooks for \`${canonicalFullName}\`. Make sure you have admin access.`
+                      : `❌ Failed to configure webhook: ${webhookResult.error}`;
+
+                await interaction.editReply(errorMessage);
+                return;
+            }
+
+            await RepositorySubscriptionModel.findOneAndUpdate(
                 {
-                    webhookActive: true,
-                    webhookSettings: {
-                        events: WEBHOOK_EVENTS,
-                        channelId: channelId,
-                    },
+                    repositoryFullName: canonicalFullName,
+                    channelId: channelId,
                 },
-                { upsert: true }
+                {
+                    repositoryFullName: canonicalFullName,
+                    guildId,
+                    channelId,
+                    events: DEFAULT_SUBSCRIPTION_EVENTS,
+                    active: true,
+                },
+                { upsert: true, new: true }
             );
 
-            debug.info(`Successfully configured webhook for ${repoName} in channel ${channelId}`);
-            await interaction.editReply(`✅ Now watching \`${repoName}\` for updates in <#${channelId}>`);
+            debug.info(`Successfully configured subscription for ${canonicalFullName} in channel ${channelId}`);
+            await interaction.editReply(`✅ Now watching \`${canonicalFullName}\` for updates in <#${channelId}>`);
         } catch (error) {
             debug.error('Error in watch command:', error);
             const errorMessage = '❌ Failed to watch repository. Please try again later.';
 
             if (interaction.deferred) {
                 await interaction.editReply(errorMessage);
-            } else {
+            } else if (!interaction.replied) {
                 await interaction.reply({ content: errorMessage, ephemeral: true });
             }
         }
     },
-};
+});

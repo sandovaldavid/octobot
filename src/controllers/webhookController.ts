@@ -1,161 +1,88 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
-import { handleGithubWebhook, handleRepositoryWebhook } from '@webhooks/handler';
+import { EventProcessor } from '@/pipeline/processor';
+import { VerifiedGithubDelivery } from '@/pipeline/types';
+import { DeliveryIdempotencyService } from '@services/deliveryIdempotencyService';
 import { debug } from '@utils/logger';
 
 export const webhookController = {
     async handleWebhook(req: Request, res: Response): Promise<void> {
+        const eventName = req.headers['x-github-event'] as string;
+        const deliveryId = (req.headers['x-github-delivery'] as string) || 'unknown-delivery';
+
+        let claimResult;
         try {
-            const event = req.headers['x-github-event'] as string;
-            const signature = req.headers['x-hub-signature-256'] as string;
-            const rawBody = JSON.stringify(req.body);
-
-            debug.info(`Received webhook event: ${event}`);
-
-            // Verify webhook signature
-            const secret = process.env.GITHUB_WEBHOOK_SECRET;
-            if (!secret) {
-                debug.error('GITHUB_WEBHOOK_SECRET not configured');
-                res.status(500).json({
-                    success: false,
-                    error: 'Webhook secret not configured',
-                });
-            }
-
-            // Skip signature verification for ping events during webhook setup
-            if (event === 'ping') {
-                debug.info('Processing ping event - skipping signature verification');
-                res.status(200).json({
-                    success: true,
-                    message: 'Webhook ping received',
-                });
-            }
-
-            if (signature) {
-                try {
-                    // Extract signature value without prefix
-                    const signatureValue = signature.replace('sha256=', '');
-
-                    // Calculate expected signature
-                    const hmac = crypto.createHmac('sha256', secret!);
-                    hmac.update(rawBody);
-                    const calculatedSignature = hmac.digest('hex');
-
-                    // Use timing-safe comparison
-                    const isValid = crypto.timingSafeEqual(
-                        Buffer.from(signatureValue),
-                        Buffer.from(calculatedSignature)
-                    );
-
-                    if (!isValid) {
-                        debug.error('Invalid webhook signature', {
-                            expected: calculatedSignature,
-                            received: signatureValue,
-                        });
-                        res.status(401).json({
-                            success: false,
-                            error: 'Invalid webhook signature',
-                        });
-                    }
-
-                    debug.info('Webhook signature verified successfully');
-                } catch (error) {
-                    debug.error('Error verifying webhook signature:', error);
-                    res.status(401).json({
-                        success: false,
-                        error: 'Invalid signature format',
-                    });
-                }
-            } else {
-                debug.warn('No signature provided in webhook request');
-                res.status(401).json({
-                    success: false,
-                    error: 'Missing signature header',
-                });
-            }
-
-            if (!event) {
-                res.status(400).json({
-                    success: false,
-                    error: 'No GitHub event specified',
-                });
-            }
-
-            await handleGithubWebhook(event, req.body);
-
-            res.status(200).json({
-                success: true,
-                message: 'Webhook processed successfully',
-            });
+            claimResult = await DeliveryIdempotencyService.claimDelivery(deliveryId, eventName);
         } catch (error) {
-            debug.error('Webhook processing error:', error);
-            res.status(500).json({
+            debug.error(`Idempotency claim failed for delivery ${deliveryId}:`, error);
+            res.status(503).json({
                 success: false,
-                error: 'Failed to process webhook',
+                error: 'Service temporarily unavailable: failed to establish delivery idempotency claim',
+                deliveryId,
             });
+            return;
         }
-    },
 
-    async testWebhook(req: Request, res: Response): Promise<void> {
+        // Duplicate delivery handling
+        if (!claimResult.claimed) {
+            res.status(claimResult.responseStatus || 200).json({
+                success: true,
+                deliveryId,
+                outcome: claimResult.outcome || 'ignored_duplicate',
+                status: claimResult.status,
+                duplicate: true,
+            });
+            return;
+        }
+
         try {
-            const testPayload = {
-                repository: {
-                    id: 123,
-                    name: 'test-repo',
-                    full_name: 'user/test-repo',
-                    private: false,
-                    html_url: 'https://github.com/user/test-repo',
-                },
-                sender: {
-                    login: 'test-user',
-                    avatar_url: 'https://github.com/user.png',
-                },
-                commits: [
-                    {
-                        id: 'abc123',
-                        message: 'Test commit message',
-                        author: {
-                            name: 'Test User',
-                            email: 'test@example.com',
-                        },
-                    },
-                ],
-                ref: 'refs/heads/main',
-                compare: 'https://github.com/user/test-repo/compare/123...456',
+            const delivery: VerifiedGithubDelivery = {
+                deliveryId,
+                eventName,
+                receivedAt: new Date(),
+                payload: req.body || {},
             };
 
-            await handleGithubWebhook('push', testPayload);
-            res.json({
-                success: true,
-                message: 'Test webhook processed successfully',
-            });
-        } catch (error) {
-            debug.error('Test webhook error:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Failed to process test webhook',
-            });
-        }
-    },
+            const result = await EventProcessor.process(delivery);
 
-    async configureRepositoryWebhook(req: Request, res: Response): Promise<void> {
-        try {
-            const { repoName } = req.params;
-
-            if (!repoName) {
-                res.status(400).json({
+            if (result.outcome === 'invalid_payload') {
+                const status = 400;
+                await DeliveryIdempotencyService.finalizeDelivery(deliveryId, result.outcome, status);
+                res.status(status).json({
                     success: false,
-                    error: 'Repository name is required',
+                    error: result.error || 'Invalid or malformed webhook payload',
+                    deliveryId,
+                    outcome: result.outcome,
                 });
+                return;
             }
 
-            const result = await handleRepositoryWebhook(repoName);
-            res.json(result);
+            if (result.outcome === 'failed' && result.error) {
+                const status = 500;
+                await DeliveryIdempotencyService.finalizeDelivery(deliveryId, result.outcome, status);
+                res.status(status).json({
+                    success: false,
+                    error: 'Failed to process webhook delivery',
+                    deliveryId,
+                    outcome: result.outcome,
+                });
+                return;
+            }
+
+            const status = 200;
+            await DeliveryIdempotencyService.finalizeDelivery(deliveryId, result.outcome, status);
+            res.status(status).json({
+                success: true,
+                deliveryId,
+                outcome: result.outcome,
+                matchedSubscriptions: result.matchedSubscriptions,
+                delivered: result.succeeded,
+            });
         } catch (error) {
-            debug.error('Repository webhook configuration error:', error);
+            debug.error('Webhook controller error:', error);
+            await DeliveryIdempotencyService.finalizeDelivery(deliveryId, 'failed', 500);
             res.status(500).json({
                 success: false,
-                error: 'Failed to configure repository webhook',
+                error: 'Internal server error processing webhook',
             });
         }
     },
