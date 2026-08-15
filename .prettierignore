@@ -4,3 +4,4 @@ logs/
 bun.lock
 *.tsbuildinfo
 .git/
+CHANGELOG.md
