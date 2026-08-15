@@ -59,6 +59,20 @@ describe('Public API security surface', () => {
         }
     });
 
+    it('does not expose issues endpoints or issues mirroring over HTTP', async () => {
+        const requests: Array<[string, RequestInit | undefined]> = [
+            ['/api/issues', undefined],
+            ['/api/issues/1', undefined],
+            ['/api/issues/repository/octobot', undefined],
+            ['/api/issues/sync', { method: 'POST' }],
+        ];
+
+        for (const [path, init] of requests) {
+            const response = await fetch(`${baseUrl}${path}`, init);
+            expect(response.status).toBe(404);
+        }
+    });
+
     it('does not expose webhook simulation or HTTP webhook administration', async () => {
         const testResponse = await fetch(`${baseUrl}/api/webhooks/github/test`, { method: 'POST' });
         const adminResponse = await fetch(`${baseUrl}/api/webhooks/github/repository/example`, { method: 'POST' });
@@ -92,10 +106,11 @@ describe('Public API security surface', () => {
         expect(JSON.stringify(body)).not.toContain('GITHUB_WEBHOOK_SECRET');
     });
 
-    it('does not retain generic GitHub repository mutation capabilities in repositoryService', () => {
+    it('does not retain generic GitHub repository mutation or sync capabilities in repositoryService', () => {
         expect('createRepository' in repositoryService).toBe(false);
         expect('updateRepository' in repositoryService).toBe(false);
         expect('deleteRepository' in repositoryService).toBe(false);
         expect('configureWebhook' in repositoryService).toBe(false);
+        expect('syncRepositories' in repositoryService).toBe(false);
     });
 });

@@ -5,17 +5,15 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.13.1-brightgreen.svg)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> GitHub Workflow Assistant desarrollado con TypeScript, Discord.js y Express para recibir eventos verificados de GitHub y entregar notificaciones accionables en Discord.
-
-OctoBot no es una API general de administración de GitHub. GitHub permanece como fuente de verdad; OctoBot se encarga de suscripciones, recepción/verificación de webhooks y entrega de notificaciones.
+> Asistente de Discord orientado a eventos para equipos de ingeniería. Notifica en tiempo real eventos de GitHub (commits, pull requests, issues, releases y ramas) hacia canales autorizados de Discord, manteniendo a **GitHub como la única fuente de la verdad**.
 
 ---
 
 ## 📋 Tabla de Contenidos
 
-- [Características](#-características)
-- [Arquitectura](#-arquitectura)
-- [Límite de Seguridad](#-límite-de-seguridad)
+- [Propósito y Límites](#-propósito-y-límites)
+- [Arquitectura y Persistencia](#-arquitectura-y-persistencia)
+- [Límites de Seguridad y Permisos](#-límites-de-seguridad-y-permisos)
 - [Requisitos](#-requisitos)
 - [Instalación y Configuración](#-instalación-y-configuración)
 - [Comandos de Discord](#-comandos-de-discord-slash-commands)
@@ -23,102 +21,93 @@ OctoBot no es una API general de administración de GitHub. GitHub permanece com
 - [Docker y Base de Datos](#-docker-y-base-de-datos)
 - [Scripts Disponibles](#-scripts-disponibles)
 - [Pruebas Automatizadas](#-pruebas-automatizadas)
+- [Licencia](#-licencia)
 
 ---
 
-## ✨ Características
+## 🎯 Propósito y Límites
 
-- 🔔 **Notificaciones de GitHub en tiempo real:** Embeds para eventos de `push`, `pull_request`, `issues`, `release`, `create` y `delete`.
-- 🎮 **Slash Commands (`/github`):** Administración del monitoreo desde Discord.
-- 📑 **Consulta interactiva de issues:** Navegación de issues desde Discord.
-- 🛡️ **Seguridad HMAC:** Verificación SHA-256 de webhooks usando el body original de la petición.
-- 🔐 **Administración acotada:** La configuración de webhooks se realiza mediante comandos de Discord con permisos administrativos; no existe una API REST pública para crear, borrar o modificar repositorios de GitHub.
-- 🔄 **Persistencia actual:** El proyecto todavía contiene sincronización de repositorios/issues en MongoDB. Esta capacidad será revisada por separado dentro del re-scope V1 y no debe considerarse una segunda fuente de verdad.
+OctoBot está diseñado como un **GitHub Workflow Assistant** enfocado y seguro:
+
+- 🔔 **Event-driven:** Reacciona a webhooks firmados de GitHub y los canaliza hacia Discord.
+- 📖 **GitHub como Source of Truth:** No replica ni almacena copias de repositorios, issues ni commits. Las consultas se realizan en vivo vía Octokit.
+- 🛡️ **Superficie HTTP Mínima:** Expone únicamente el receptor de webhooks con firma HMAC SHA-256 (`/api/webhooks/github`) y un healthcheck (`/health`).
+- 🔐 **Control de Acceso:** La gestión de suscripciones se realiza exclusivamente mediante Slash Commands en Discord protegidos por permisos de servidor (`Administrator` / `ManageGuild`).
 
 ---
 
-## 🏛️ Arquitectura
+## 🏛️ Arquitectura y Persistencia
 
 ```mermaid
 graph TD
-    GH[GitHub Repositories / Webhooks] -->|signed POST /api/webhooks/github| API[Express webhook ingress]
-    User[Authorized Discord User] -->|/github repo watch / unwatch| Bot[Discord Bot]
-    API --> Handler[Webhook Handler]
-    Handler --> DiscordSvc[Discord Notification Service]
-    DiscordSvc --> Channel[Discord Channel]
-    Bot --> GH
-    Bot --> Mongo[(MongoDB - temporary operational persistence)]
-    API --> Mongo
+    subgraph GitHub [GitHub Source of Truth]
+        GH_Hook[GitHub Webhooks]
+        GH_API[GitHub REST API]
+    end
+
+    subgraph OctoBot [OctoBot Runtime]
+        Ingress[Express Ingress: /api/webhooks/github]
+        HMAC[verifyGithubWebhook Middleware]
+        Handler[Webhook Event Handler]
+        DiscordClient[Discord Bot Client]
+        IssueSvc[Live Issue Query Service]
+    end
+
+    subgraph Storage [MongoDB: Operational State Only]
+        Subs[(RepositorySubscriptions)]
+    end
+
+    GH_Hook -->|POST rawBody + x-hub-signature-256| Ingress
+    Ingress --> HMAC
+    HMAC --> Handler
+    Handler -->|Lookup Target Channel| Subs
+    Handler -->|Dispatch Notification Embed| DiscordClient
+    DiscordClient -->|Alerts| DiscordChannel[Discord Channel]
+
+    DiscordUser[Discord User] -->|/github issues list repo:octobot| DiscordClient
+    DiscordClient --> IssueSvc
+    IssueSvc -->|Live API Read with PR filter| GH_API
+
+    DiscordAdmin[Discord Admin] -->|/github repo watch / unwatch| DiscordClient
+    DiscordClient -->|Manage Subscriptions| Subs
 ```
 
-Responsabilidades:
+### Datos Persistidos en MongoDB (`RepositorySubscription`)
 
-```text
-GitHub
-→ estado canónico del repositorio
+MongoDB almacena **únicamente datos operativos propiedad de OctoBot**:
 
-OctoBot
-→ suscripciones, verificación de eventos, routing y entrega
-
-Discord
-→ superficie administrativa autorizada y notificaciones
-
-MongoDB
-→ persistencia operacional existente; no es fuente canónica de GitHub
-```
+- `repositoryFullName`: Nombre del repositorio (e.g. `owner/repo`).
+- `guildId`: ID del servidor de Discord.
+- `channelId`: ID del canal de Discord configurado para recibir alertas.
+- `events`: Tipos de eventos suscritos (`push`, `pull_request`, `issues`, etc.).
+- `active`: Estado booleano de la suscripción.
+- `createdAt`, `updatedAt`: Marcas temporales.
 
 ---
 
-## 🔐 Límite de Seguridad
+## 🔒 Límites de Seguridad y Permisos
 
-La superficie HTTP pública se mantiene deliberadamente pequeña.
+### Capacidades GitHub Requeridas
 
-### Eliminado del runtime HTTP
+- Lectura de metadata de repositorios suscritos;
+- Lectura de issues en vivo para el comando `/github issues list`;
+- Creación y eliminación de repository webhooks (`watch`, `unwatch`).
 
-OctoBot no monta `/api/repositories`. Por tanto, no existe una ruta HTTP pública para:
+OctoBot **no cuenta ni requiere** capacidades para:
 
-- crear repositorios;
-- borrar repositorios;
-- renombrar o actualizar repositorios;
-- cambiar visibilidad;
-- reemplazar topics/settings;
-- listar repositorios privados usando las credenciales del bot;
-- consultar el mirror de repositorios mediante REST.
-
-También se eliminaron:
-
-- `POST /api/webhooks/github/test`;
-- `POST /api/webhooks/github/repository/:repoName`.
-
-La administración de suscripciones se mantiene en los comandos autorizados de Discord (`watch`, `unwatch`, `check-webhook`).
-
-### Capacidades de GitHub requeridas
-
-El código V1 actual necesita únicamente capacidades asociadas a los flujos retenidos:
-
-- lectura de metadata de repositorios utilizada por las funciones internas actuales;
-- lectura de issues mientras exista esa funcionalidad;
-- lectura/escritura de repository webhooks para `watch`, `unwatch` y verificación de configuración.
-
-OctoBot ya no necesita capacidades para:
-
-- eliminar repositorios;
-- crear repositorios;
-- modificar visibilidad;
-- renombrar repositorios;
-- modificar topics/settings mediante una API administrativa propia.
-
-Al configurar `GITHUB_TOKEN`, utiliza el token más acotado que soporte los repositorios y capacidades anteriores. La reducción adicional de permisos deberá acompañar la futura eliminación del mirroring de repositorios/issues.
+- Crear o eliminar repositorios;
+- Modificar visibilidad (público/privado);
+- Renombrar repositorios o alterar topics.
 
 ---
 
 ## 📋 Requisitos
 
 - [Bun](https://bun.sh) `>=1.2.0` o [Node.js](https://nodejs.org) `>=22.13.1`
-- Docker y Docker Compose para el entorno MongoDB actual
-- Aplicación registrada de Discord
-- Token de GitHub limitado a los repositorios/capacidades realmente requeridos
-- Webhook secret compartido entre GitHub y OctoBot
+- Docker y Docker Compose para MongoDB
+- Aplicación de Discord registrada en [Discord Developer Portal](https://discord.com/developers/applications)
+- Token de GitHub (`GITHUB_TOKEN`)
+- Clave secreta para webhooks (`GITHUB_WEBHOOK_SECRET`)
 
 ---
 
@@ -146,7 +135,7 @@ Al configurar `GITHUB_TOKEN`, utiliza el token más acotado que soporte los repo
 4. **Variables requeridas en `.env`:**
 
     ```env
-    PORT=1234
+    PORT=4000
     NODE_ENV=development
 
     # Discord
@@ -155,7 +144,7 @@ Al configurar `GITHUB_TOKEN`, utiliza el token más acotado que soporte los repo
     DISCORD_GUILD_ID=your_guild_id
     DISCORD_CLIENT_ID=your_client_id
 
-    # MongoDB
+    # MongoDB (para RepositorySubscriptions)
     MONGO_USER=dev-octobot
     MONGO_PASSWORD=your_password
     MONGO_DATABASE=db-octobot
@@ -175,39 +164,34 @@ Al configurar `GITHUB_TOKEN`, utiliza el token más acotado que soporte los repo
 
 Todos los comandos están agrupados bajo `/github`:
 
-| Grupo    | Comando                      | Parámetros                                   | Descripción                                                            |
-| -------- | ---------------------------- | -------------------------------------------- | ---------------------------------------------------------------------- |
-| `repo`   | `/github repo watch`         | `name:<repo>` (requerido)                    | Configura el webhook y asocia el repositorio al canal actual.          |
-| `repo`   | `/github repo unwatch`       | `name:<repo>` (requerido)                    | Elimina el webhook y desactiva el monitoreo.                           |
-| `repo`   | `/github repo sync`          | Ninguno                                      | Sincronización interna heredada con MongoDB; pendiente de revisión V1. |
-| `repo`   | `/github repo check-webhook` | `name:<repo>` (requerido)                    | Verifica si el webhook del repositorio está configurado.               |
-| `issues` | `/github issues list`        | `state:[open\|closed\|all]`, `repo:[nombre]` | Lista issues mediante navegación interactiva.                          |
-
-Los comandos administrativos de repositorio requieren permisos de Discord `Administrator` o `ManageGuild` según la implementación actual.
+| Grupo    | Comando                      | Parámetros                                               | Descripción                                                                                                          |
+| -------- | ---------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `repo`   | `/github repo watch`         | `name:<repo>` (requerido)                                | Configura el webhook en GitHub y crea la suscripción para el canal actual. Requiere `Administrator` o `ManageGuild`. |
+| `repo`   | `/github repo unwatch`       | `name:<repo>` (requerido)                                | Elimina la suscripción del canal y retira el webhook de GitHub si no hay otros canales suscritos.                    |
+| `repo`   | `/github repo check-webhook` | `name:<repo>` (requerido)                                | Verifica si el webhook está activo en GitHub y muestra el canal suscrito.                                            |
+| `issues` | `/github issues list`        | `repo:<nombre>` (requerido), `state:[open\|closed\|all]` | Consulta issues en vivo desde GitHub con paginación interactiva por botones.                                         |
 
 ---
 
 ## 🌐 Superficie HTTP
 
-### Retenido
+### Endpoints Disponibles
 
-- `GET /health` — estado operacional básico sin credenciales.
-- `POST /api/webhooks/github` — receptor de GitHub protegido por verificación HMAC.
-- `/api/issues/*` — superficie heredada de issues mientras se completa el workstream de persistencia/mirroring.
+- `GET /health` — Estado operacional de Discord, Webhooks y MongoDB (sin exponer secretos).
+- `POST /api/webhooks/github` — Receptor principal de eventos GitHub (protegido por middleware HMAC SHA-256 sobre `rawBody`).
 
-### No expuesto
+### Endpoints Eliminados (`404`)
 
-- `/api/repositories/*` — `404` por diseño.
-- `POST /api/webhooks/github/test` — `404` por diseño.
-- `POST /api/webhooks/github/repository/:repoName` — `404` por diseño.
-
-La configuración de repository webhooks no se realiza mediante HTTP público; utiliza los comandos autorizados de Discord.
+- `/api/repositories/*` — `404 Not Found`.
+- `/api/issues/*` — `404 Not Found`.
+- `POST /api/webhooks/github/test` — `404 Not Found`.
+- `POST /api/webhooks/github/repository/:repoName` — `404 Not Found`.
 
 ---
 
 ## 🐳 Docker y Base de Datos
 
-Para levantar el entorno MongoDB actual:
+Para levantar el contenedor local de MongoDB:
 
 ```bash
 docker compose -f docker-compose.development.yml up -d
@@ -216,37 +200,41 @@ docker compose -f docker-compose.development.yml up -d
 - **MongoDB:** `localhost:27017`
 - **Mongo Express:** `http://localhost:8081`
 
-MongoDB sigue formando parte de la implementación actual, pero su alcance se revisará en el workstream V1 de eliminación del mirroring de GitHub.
-
 ---
 
 ## 📜 Scripts Disponibles
 
 ```bash
-bun run dev
-bun run start
-bun test
-bun run typecheck
-bun run lint
-bun run lint:fix
-bun run format
-bun run format:check
+bun run dev          # Iniciar con hot reload
+bun run start        # Iniciar en producción
+bun test             # Ejecutar suite de pruebas unitarias
+bun run typecheck    # Verificación estática TypeScript (tsc --noEmit)
+bun run lint         # Análisis estático de código (ESLint 9)
+bun run format:check # Comprobación de formato (Prettier)
+bun run format       # Autoformateo de código
 ```
 
 ---
 
 ## 🧪 Pruebas Automatizadas
 
-La suite utiliza el runner nativo de Bun.
-
 ```bash
 bun test
 ```
 
-La cobertura incluye validadores, configuración, servicios, verificación HMAC y regresiones de la superficie HTTP pública. Los tests de seguridad confirman que las antiguas rutas administrativas retornan `404` y que el receptor de webhooks continúa protegido.
+Suites de pruebas:
+
+- `tests/config/envConfig.test.ts` (validación de variables de entorno)
+- `tests/middlewares/verifyGithubWebhook.test.ts` (verificación de firma HMAC)
+- `tests/models/subscription.test.ts` (esquema e invariantes de suscripciones)
+- `tests/security/publicApiSurface.test.ts` (verificación de superficie HTTP e inmunidad de rutas 404)
+- `tests/services/discordService.test.ts` (formateo y color de notificaciones)
+- `tests/services/repositoryService.test.ts` (mapeo de datos de GitHub)
+- `tests/services/webhookService.test.ts` (construcción de webhooks)
+- `tests/utils/validators.test.ts` (validadores de snowflakes, URLs y nombres)
 
 ---
 
 ## 📄 Licencia
 
-Este proyecto está bajo la Licencia MIT.
+Este proyecto está bajo la [Licencia MIT](LICENSE).

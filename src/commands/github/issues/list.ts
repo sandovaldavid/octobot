@@ -13,23 +13,23 @@ export const list = createCommand({
         description: 'Issue management commands',
         subcommand: {
             name: 'list',
-            description: 'List all issues',
+            description: 'List issues from a GitHub repository',
             options: [
                 {
+                    name: 'repo',
+                    description: 'Name of the repository to list issues from',
+                    type: 'string',
+                    required: true,
+                },
+                {
                     name: 'state',
-                    description: 'Filter issues by state',
+                    description: 'Filter issues by state (default: open)',
                     type: 'string',
                     choices: [
                         { name: 'Open', value: 'open' },
                         { name: 'Closed', value: 'closed' },
                         { name: 'All', value: 'all' },
                     ],
-                    required: false,
-                },
-                {
-                    name: 'repo',
-                    description: 'Filter by repository',
-                    type: 'string',
                     required: false,
                 },
             ],
@@ -40,28 +40,28 @@ export const list = createCommand({
         try {
             await interaction.deferReply();
 
+            const repo = interaction.options.getString('repo', true);
             const state = (interaction.options.getString('state') || 'open') as 'open' | 'closed' | 'all';
-            const repo = interaction.options.getString('repo') ?? undefined;
             let currentPage = 1;
 
-            const displayResult = await IssueDisplayService.fetchAndDisplay({
+            let currentResult = await IssueDisplayService.fetchAndDisplay({
                 state,
                 repo,
                 page: currentPage,
                 perPage: CommandConfig.pagination.perPage,
             });
 
-            if (!displayResult.success) {
+            if (!currentResult.success) {
                 await interaction.editReply({
-                    embeds: [displayResult.embed],
+                    embeds: [currentResult.embed],
                     components: [],
                 });
                 return;
             }
 
             const message = await interaction.editReply({
-                embeds: [displayResult.embed],
-                components: displayResult.buttons ? [displayResult.buttons] : [],
+                embeds: [currentResult.embed],
+                components: currentResult.buttons ? [currentResult.buttons] : [],
             });
 
             const collector = message.createMessageComponentCollector<ComponentType.Button>({
@@ -73,13 +73,13 @@ export const list = createCommand({
                 try {
                     await i.deferUpdate();
 
-                    if (i.customId === 'prev' && currentPage > 1) {
+                    if (i.customId === 'prev' && (currentResult.hasPrevious || currentPage > 1)) {
                         currentPage--;
-                    } else if (i.customId === 'next' && currentPage < (displayResult.totalPages || 1)) {
+                    } else if (i.customId === 'next' && currentResult.hasNext) {
                         currentPage++;
                     }
 
-                    const newResult = await IssueDisplayService.fetchAndDisplay({
+                    currentResult = await IssueDisplayService.fetchAndDisplay({
                         state,
                         repo,
                         page: currentPage,
@@ -87,11 +87,11 @@ export const list = createCommand({
                     });
 
                     await i.editReply({
-                        embeds: [newResult.embed],
-                        components: newResult.buttons ? [newResult.buttons] : [],
+                        embeds: [currentResult.embed],
+                        components: currentResult.buttons ? [currentResult.buttons] : [],
                     });
 
-                    if (!newResult.success) {
+                    if (!currentResult.success) {
                         collector.stop();
                     }
                 } catch (error) {

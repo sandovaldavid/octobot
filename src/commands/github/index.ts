@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 
-type RepoSubcommands = 'watch' | 'unwatch' | 'sync' | 'check-webhook';
+type RepoSubcommands = 'watch' | 'unwatch' | 'check-webhook';
 type IssueSubcommands = 'list';
 import * as repoCommands from './repos';
 import * as issueCommands from './issues';
@@ -9,33 +9,35 @@ import { debug } from '@utils/logger';
 export const github = {
     data: new SlashCommandBuilder()
         .setName('github')
-        .setDescription('GitHub management commands')
+        .setDescription('GitHub workflow assistant commands')
         // Repository commands group
         .addSubcommandGroup((group) =>
             group
                 .setName('repo')
-                .setDescription('Repository management commands')
+                .setDescription('Repository subscription commands')
                 .addSubcommand((subcommand) =>
                     subcommand
                         .setName('watch')
-                        .setDescription('Watch a repository')
+                        .setDescription('Watch a repository and route alerts to this channel')
                         .addStringOption((option) =>
-                            option.setName('name').setDescription('Repository name').setRequired(true)
+                            option
+                                .setName('name')
+                                .setDescription('Repository name (e.g. owner/repo or repo)')
+                                .setRequired(true)
                         )
                 )
                 .addSubcommand((subcommand) =>
                     subcommand
                         .setName('unwatch')
-                        .setDescription('Unwatch a repository')
+                        .setDescription('Stop watching a repository in this channel')
                         .addStringOption((option) =>
                             option.setName('name').setDescription('Repository name').setRequired(true)
                         )
                 )
-                .addSubcommand((subcommand) => subcommand.setName('sync').setDescription('Sync repositories'))
                 .addSubcommand((subcommand) =>
                     subcommand
                         .setName('check-webhook')
-                        .setDescription('Check if a repository has an active webhook')
+                        .setDescription('Check if a repository has an active webhook configured')
                         .addStringOption((option) =>
                             option.setName('name').setDescription('Name of the repository to check').setRequired(true)
                         )
@@ -45,24 +47,24 @@ export const github = {
         .addSubcommandGroup((group) =>
             group
                 .setName('issues')
-                .setDescription('Issue management commands')
+                .setDescription('Issue query commands')
                 .addSubcommand((subcommand) =>
                     subcommand
                         .setName('list')
-                        .setDescription('List all issues')
+                        .setDescription('List issues from a GitHub repository')
+                        .addStringOption((option) =>
+                            option.setName('repo').setDescription('Repository name').setRequired(true)
+                        )
                         .addStringOption((option) =>
                             option
                                 .setName('state')
-                                .setDescription('Filter issues by state')
+                                .setDescription('Filter issues by state (open/closed/all)')
                                 .addChoices(
                                     { name: 'Open', value: 'open' },
                                     { name: 'Closed', value: 'closed' },
                                     { name: 'All', value: 'all' }
                                 )
                                 .setRequired(false)
-                        )
-                        .addStringOption((option) =>
-                            option.setName('repo').setDescription('Filter by repository').setRequired(false)
                         )
                 )
         ),

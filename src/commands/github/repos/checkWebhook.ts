@@ -11,7 +11,7 @@ export const checkWebhook = createCommand({
         description: 'Repository management commands',
         subcommand: {
             name: 'check-webhook',
-            description: 'Check if a repository has an active webhook',
+            description: 'Check if a repository has an active webhook configured',
             options: [
                 {
                     name: 'name',
@@ -43,13 +43,13 @@ export const checkWebhook = createCommand({
             const { exists: hasWebhook, active: isActive, channelId } = result.data || {};
 
             let message = hasWebhook
-                ? `✅ Repository \`${repoName}\` has a webhook configured\n`
-                : `❌ Repository \`${repoName}\` does not have a webhook configured\n`;
+                ? `✅ Repository \`${repoName}\` has a webhook configured in GitHub\n`
+                : `❌ Repository \`${repoName}\` does not have a webhook configured in GitHub\n`;
 
             if (hasWebhook) {
                 message += `Status: ${isActive ? '🟢 Active' : '🔴 Inactive'}\n`;
                 if (channelId) {
-                    message += `Channel: <#${channelId}>`;
+                    message += `Subscribed Channel: <#${channelId}>`;
                 }
             }
 
