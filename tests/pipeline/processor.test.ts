@@ -1,10 +1,18 @@
-import { describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn, afterEach } from 'bun:test';
 import { EventProcessor } from '../../src/pipeline/processor';
 import { SubscriptionRouter } from '../../src/pipeline/router';
 import { VerifiedGithubDelivery } from '../../src/pipeline/types';
 import { WorkflowStateService } from '../../src/services/workflowStateService';
 
 describe('Pipeline - Event Processor', () => {
+    let routerSpy: any;
+    let wfSpy: any;
+
+    afterEach(() => {
+        if (routerSpy?.mockRestore) routerSpy.mockRestore();
+        if (wfSpy?.mockRestore) wfSpy.mockRestore();
+    });
+
     it('debe retornar invalid_payload cuando el payload está malformado', async () => {
         const delivery: VerifiedGithubDelivery = {
             deliveryId: 'invalid-delivery-1',
@@ -46,7 +54,7 @@ describe('Pipeline - Event Processor', () => {
     });
 
     it('debe evaluar workflow_run y filtrar por política si no hay alerta accionable', async () => {
-        spyOn(WorkflowStateService, 'evaluateTransition').mockResolvedValue({
+        wfSpy = spyOn(WorkflowStateService, 'evaluateTransition').mockResolvedValue({
             shouldNotify: false,
             alertType: 'none',
             reason: 'repeated_failure_suppressed',
@@ -105,7 +113,7 @@ describe('Pipeline - Event Processor', () => {
     });
 
     it('debe retornar ignored_no_subscription cuando no hay suscripciones activas', async () => {
-        spyOn(SubscriptionRouter, 'resolveTargetChannels').mockResolvedValue({
+        routerSpy = spyOn(SubscriptionRouter, 'resolveTargetChannels').mockResolvedValue({
             matchedSubscriptionsCount: 0,
             targetChannelIds: [],
         });
@@ -127,7 +135,7 @@ describe('Pipeline - Event Processor', () => {
     });
 
     it('debe retornar ignored_subscription_filter cuando el evento está filtrado por preferencias', async () => {
-        spyOn(SubscriptionRouter, 'resolveTargetChannels').mockResolvedValue({
+        routerSpy = spyOn(SubscriptionRouter, 'resolveTargetChannels').mockResolvedValue({
             matchedSubscriptionsCount: 1,
             targetChannelIds: [],
         });
