@@ -5,6 +5,7 @@ import {
     ChatInputCommandInteraction,
     EmbedBuilder,
     InteractionReplyOptions,
+    MessageFlags,
 } from 'discord.js';
 import { DiscordColors } from '@/types/discord';
 import { DEFAULT_SUBSCRIPTION_EVENTS, WebhookEventType } from '@/types/webhook';
@@ -37,15 +38,21 @@ export interface GhCommandDeps {
 }
 
 async function sendResponse(interaction: ChatInputCommandInteraction, payload: InteractionReplyOptions): Promise<void> {
+    const finalPayload: InteractionReplyOptions = { ...payload };
+    if (finalPayload.ephemeral) {
+        finalPayload.flags = (finalPayload.flags ? Number(finalPayload.flags) : 0) | MessageFlags.Ephemeral;
+        delete finalPayload.ephemeral;
+    }
+
     if (interaction.deferred) {
         await interaction.editReply({
-            content: payload.content,
-            embeds: payload.embeds,
-            components: payload.components,
-            files: payload.files,
+            content: finalPayload.content,
+            embeds: finalPayload.embeds,
+            components: finalPayload.components,
+            files: finalPayload.files,
         });
     } else if (!interaction.replied) {
-        await interaction.reply(payload);
+        await interaction.reply(finalPayload);
     }
 }
 
@@ -76,7 +83,7 @@ export async function executeGhDispatcher(
 
     if (!verifyCommandAuthorization(interaction)) {
         const errorMsg = toUserFacingErrorMessage(new MissingCommandPermissionError('Manage Server'));
-        const payload = decorateResponse({ content: errorMsg, ephemeral: true }, isDeprecatedNamespace);
+        const payload = decorateResponse({ content: errorMsg, flags: MessageFlags.Ephemeral }, isDeprecatedNamespace);
         await sendResponse(interaction, payload);
         return;
     }
@@ -116,14 +123,14 @@ export async function executeGhDispatcher(
 
         debug.warn(`Unknown subcommand route: ${group ? `${group}.${subcommand}` : subcommand}`);
         const invalidPayload = decorateResponse(
-            { content: '⚠️ Unknown or unsupported command.', ephemeral: true },
+            { content: '⚠️ Unknown or unsupported command.', flags: MessageFlags.Ephemeral },
             isDeprecatedNamespace
         );
         await sendResponse(interaction, invalidPayload);
     } catch (error: any) {
         debug.error('Error in executeGhDispatcher:', error);
         const userMsg = toUserFacingErrorMessage(error);
-        const payload = decorateResponse({ content: userMsg, ephemeral: true }, isDeprecatedNamespace);
+        const payload = decorateResponse({ content: userMsg, flags: MessageFlags.Ephemeral }, isDeprecatedNamespace);
         await sendResponse(interaction, payload);
     }
 }
@@ -136,7 +143,7 @@ async function handleConnect(
     const guildId = interaction.guildId;
     if (!guildId) {
         const payload = decorateResponse(
-            { content: '⚠️ This command can only be used within a server (Guild).', ephemeral: true },
+            { content: '⚠️ This command can only be used within a server (Guild).', flags: MessageFlags.Ephemeral },
             isDeprecatedNamespace
         );
         await sendResponse(interaction, payload);
@@ -162,7 +169,7 @@ async function handleConnect(
         {
             embeds: [embed],
             components: [row],
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
         },
         isDeprecatedNamespace
     );
@@ -178,7 +185,7 @@ async function handleDisconnect(
     const guildId = interaction.guildId;
     if (!guildId) {
         const payload = decorateResponse(
-            { content: '⚠️ This command can only be used within a server (Guild).', ephemeral: true },
+            { content: '⚠️ This command can only be used within a server (Guild).', flags: MessageFlags.Ephemeral },
             isDeprecatedNamespace
         );
         await sendResponse(interaction, payload);
@@ -190,7 +197,7 @@ async function handleDisconnect(
     const payload = decorateResponse(
         {
             content: '🔌 Disconnected all GitHub App installations from this Discord server.',
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
         },
         isDeprecatedNamespace
     );
@@ -206,7 +213,7 @@ async function handleStatus(
     const guildId = interaction.guildId;
     if (!guildId) {
         const payload = decorateResponse(
-            { content: '⚠️ This command can only be used within a server (Guild).', ephemeral: true },
+            { content: '⚠️ This command can only be used within a server (Guild).', flags: MessageFlags.Ephemeral },
             isDeprecatedNamespace
         );
         await sendResponse(interaction, payload);
@@ -276,7 +283,7 @@ async function handleRepoWatch(
 
     if (!guildId) {
         const payload = decorateResponse(
-            { content: '⚠️ This command can only be used within a server (Guild).', ephemeral: true },
+            { content: '⚠️ This command can only be used within a server (Guild).', flags: MessageFlags.Ephemeral },
             isDeprecatedNamespace
         );
         await sendResponse(interaction, payload);
@@ -361,7 +368,7 @@ async function handleRepoUnwatch(
 
     if (!guildId) {
         const payload = decorateResponse(
-            { content: '⚠️ This command can only be used within a server (Guild).', ephemeral: true },
+            { content: '⚠️ This command can only be used within a server (Guild).', flags: MessageFlags.Ephemeral },
             isDeprecatedNamespace
         );
         await sendResponse(interaction, payload);
@@ -388,6 +395,7 @@ async function handleRepoUnwatch(
         const payload = decorateResponse(
             {
                 content: `⚠️ Repository \`${repoInput}\` is not currently being watched in <#${channelId}>.`,
+                flags: MessageFlags.Ephemeral,
             },
             isDeprecatedNamespace
         );
@@ -398,6 +406,7 @@ async function handleRepoUnwatch(
     const payload = decorateResponse(
         {
             content: `✅ Stopped watching \`${sub.repositoryFullName}\` in <#${channelId}>.`,
+            flags: MessageFlags.Ephemeral,
         },
         isDeprecatedNamespace
     );
@@ -414,7 +423,7 @@ async function handleRepoCheck(
 
     if (!guildId) {
         const payload = decorateResponse(
-            { content: '⚠️ This command can only be used within a server (Guild).', ephemeral: true },
+            { content: '⚠️ This command can only be used within a server (Guild).', flags: MessageFlags.Ephemeral },
             isDeprecatedNamespace
         );
         await sendResponse(interaction, payload);
@@ -520,7 +529,7 @@ async function handleIssuesList(
 
     if (!guildId) {
         const payload = decorateResponse(
-            { content: '⚠️ This command can only be used within a server (Guild).', ephemeral: true },
+            { content: '⚠️ This command can only be used within a server (Guild).', flags: MessageFlags.Ephemeral },
             isDeprecatedNamespace
         );
         await sendResponse(interaction, payload);

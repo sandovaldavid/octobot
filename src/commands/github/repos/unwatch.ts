@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
+import { ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { RepositorySubscriptionModel } from '@models/subscription';
 import { webhookService } from '@services/github/webhookService';
 import { githubClient } from '@config/githubConfig';
@@ -34,7 +34,7 @@ export const unwatch = createCommand({
             if (!hasAdminPermission) {
                 await interaction.reply({
                     content: '🚫 You need **Administrator** or **Manage Server** permissions to execute this command.',
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
                 return;
             }
@@ -91,7 +91,7 @@ export const unwatch = createCommand({
             if (interaction.deferred) {
                 await interaction.editReply(errorMessage);
             } else if (!interaction.replied) {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
+                await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
             }
         }
     },

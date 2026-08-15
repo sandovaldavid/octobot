@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import {
     ApplicationIntegrationType,
     InteractionContextType,
+    MessageFlags,
     PermissionFlagsBits,
     PermissionsBitField,
 } from 'discord.js';
@@ -206,7 +207,7 @@ describe('Commands - Global /gh Surface & /github Deprecated Alias', () => {
             expect(mockInteraction.reply).toHaveBeenCalledTimes(1);
             const callArg = mockInteraction.reply.mock.calls[0][0];
             expect(callArg.content).toContain('Manage Server');
-            expect(callArg.ephemeral).toBe(true);
+            expect(callArg.flags).toBe(MessageFlags.Ephemeral);
             expect(mockOnboardingController.createConnectUrl).not.toHaveBeenCalled();
         });
 
@@ -225,7 +226,7 @@ describe('Commands - Global /gh Surface & /github Deprecated Alias', () => {
             expect(mockOnboardingController.createConnectUrl).toHaveBeenCalledWith('guild-1', 'admin-1');
             expect(mockInteraction.reply).toHaveBeenCalledTimes(1);
             const callArg = mockInteraction.reply.mock.calls[0][0];
-            expect(callArg.ephemeral).toBe(true);
+            expect(callArg.flags).toBe(MessageFlags.Ephemeral);
             expect(callArg.embeds.length).toBeGreaterThan(0);
             expect(callArg.components.length).toBeGreaterThan(0);
         });

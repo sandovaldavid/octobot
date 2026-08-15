@@ -1,4 +1,4 @@
-import { Collection, ChatInputCommandInteraction } from 'discord.js';
+import { Collection, ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 import { debug } from '@utils/logger';
 import { github } from './github';
 import { ghCommand } from './gh';
@@ -50,7 +50,7 @@ class CommandRegistry {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: 'There was an error executing this command!',
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
             }
         }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import crypto from 'crypto';
 import type { Server } from 'http';
-import { PermissionFlagsBits, PermissionsBitField } from 'discord.js';
+import { MessageFlags, PermissionFlagsBits, PermissionsBitField } from 'discord.js';
 
 import { createApp } from '@/app';
 import { executeGhDispatcher } from '@commands/gh/dispatcher';
@@ -900,7 +900,7 @@ describe('Security - Multi-Tenant Isolation & Attack Surface Suite', () => {
                 expect(interaction.replied).toBe(true);
                 const reply = interaction.getReplies()[0];
                 expect(reply.content).toContain('Manage Server');
-                expect(reply.ephemeral).toBe(true);
+                expect(reply.flags).toBe(MessageFlags.Ephemeral);
 
                 if (isDeprecated) {
                     expect(reply.content).toContain(DEPRECATION_NOTICE);

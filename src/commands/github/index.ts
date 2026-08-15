@@ -2,6 +2,7 @@ import {
     ApplicationIntegrationType,
     ChatInputCommandInteraction,
     InteractionContextType,
+    MessageFlags,
     SlashCommandBuilder,
 } from 'discord.js';
 import { validateEnv } from '@config/envConfig';
@@ -155,7 +156,7 @@ export const github = {
         await interaction.reply({
             content:
                 '⚠️ This command is only supported in GitHub App mode. Please upgrade your deployment to use GitHub App.',
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
         });
     },
 };
