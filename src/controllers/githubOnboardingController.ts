@@ -111,11 +111,25 @@ export function createOnboardingController(deps: GitHubOnboardingControllerDeps)
             }
 
             const installStateHash = hashNonce(state);
-            const attempt = await deps.attemptModel.findOne({
-                installStateHash,
-                status: 'pending_setup',
-                expiresAt: { $gt: new Date() },
-            });
+            const oauthNonce = crypto.randomBytes(32).toString('hex');
+            const { verifier, challenge } = generatePkce();
+
+            const attempt = await deps.attemptModel.findOneAndUpdate(
+                {
+                    installStateHash,
+                    status: 'pending_setup',
+                    expiresAt: { $gt: new Date() },
+                },
+                {
+                    $set: {
+                        oauthStateHash: hashNonce(oauthNonce),
+                        oauthCodeVerifier: verifier,
+                        candidateInstallationId: installationId,
+                        status: 'pending_oauth',
+                    },
+                },
+                { new: true }
+            );
 
             if (!attempt) {
                 res.status(400).send(
@@ -123,15 +137,6 @@ export function createOnboardingController(deps: GitHubOnboardingControllerDeps)
                 );
                 return;
             }
-
-            const oauthNonce = crypto.randomBytes(32).toString('hex');
-            const { verifier, challenge } = generatePkce();
-
-            attempt.oauthStateHash = hashNonce(oauthNonce);
-            attempt.oauthCodeVerifier = verifier;
-            attempt.candidateInstallationId = installationId;
-            attempt.status = 'pending_oauth';
-            await attempt.save();
 
             const authorizeUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(
                 deps.appConfig.clientId

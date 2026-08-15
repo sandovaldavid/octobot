@@ -525,8 +525,6 @@ async function handleIssuesList(
         return;
     }
 
-    await interaction.deferReply();
-
     const repoInput = interaction.options.getString('repo', true).trim();
     const state = (interaction.options.getString('state') || 'open') as 'open' | 'closed' | 'all';
     const limit = interaction.options.getInteger('limit') || 5;
@@ -544,6 +542,28 @@ async function handleIssuesList(
         owner = installation.accountLogin;
         repo = repoInput.trim();
     }
+
+    const repoFullName = `${owner}/${repo}`;
+
+    // Restrict issue listing to repositories actively watched in this Discord guild
+    const subscription = await deps.subscriptionModel.findOne({
+        guildId,
+        repositoryFullName: repoFullName,
+        active: true,
+    });
+
+    if (!subscription) {
+        const payload = decorateResponse(
+            {
+                content: `⚠️ OctoBot is not watching **${repoFullName}** in this server. An administrator must run \`/gh repo watch\` first.`,
+            },
+            isDeprecatedNamespace
+        );
+        await sendResponse(interaction, payload);
+        return;
+    }
+
+    await interaction.deferReply();
 
     const { data } = await octokit.rest.issues.listForRepo({
         owner,

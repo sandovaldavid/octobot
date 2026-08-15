@@ -8,6 +8,7 @@ import {
     GuildNotConnectedError,
     InstallationRevokedError,
     InstallationSuspendedError,
+    RepositoryNotAccessibleError,
 } from '../../../src/types/multiTenantErrors';
 
 describe('Services - GitHub Resolvers', () => {
@@ -358,7 +359,7 @@ describe('Services - GitHub Resolvers', () => {
             expect(list[0].accountLogin).toBe('org-active');
         });
 
-        it('should fallback to first connected installation when repositoryFullName owner does not match any connection', async () => {
+        it('should throw RepositoryNotAccessibleError when repositoryFullName owner does not match any connected installation', async () => {
             findConnectionSpy.mockReturnValue({
                 lean: mock(async () => [
                     { guildId: 'guild-1', installationId: 5001, status: 'connected' },
@@ -385,10 +386,9 @@ describe('Services - GitHub Resolvers', () => {
             } as any);
 
             const resolver = new GitHubInstallationResolver();
-            const context = await resolver.resolveForGuild('guild-1', 'other-org/some-repo');
-
-            expect(context.installationId).toBe(5001);
-            expect(context.accountLogin).toBe('org-alpha');
+            expect(resolver.resolveForGuild('guild-1', 'other-org/some-repo')).rejects.toThrow(
+                RepositoryNotAccessibleError
+            );
         });
 
         it('should properly convert permissions Map to plain object', async () => {

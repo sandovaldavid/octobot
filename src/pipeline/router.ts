@@ -41,16 +41,32 @@ export async function routeEventToSubscriptions(
 
     let query: any;
 
-    if (repositoryId && installationId) {
-        query = { installationId, repositoryId, active: true };
-    } else if (repositoryId) {
-        query = { repositoryId, active: true };
-    } else if (installationId && repoFullName) {
-        query = { repositoryFullName: repoFullName, installationId, active: true };
-    } else if (repoFullName) {
-        query = { repositoryFullName: repoFullName, active: true };
+    if (installationId) {
+        // Strict GitHub App routing: matches only subscriptions created under this installationId
+        if (repositoryId) {
+            query = { installationId, repositoryId, active: true };
+        } else if (repoFullName) {
+            query = { installationId, repositoryFullName: repoFullName, active: true };
+        } else {
+            query = { installationId, active: true };
+        }
     } else {
-        query = { installationId, active: true };
+        // Strict Legacy PAT routing: matches only legacy subscriptions without an installationId
+        if (repositoryId) {
+            query = {
+                repositoryId,
+                installationId: { $in: [null, undefined] },
+                active: true,
+            };
+        } else if (repoFullName) {
+            query = {
+                repositoryFullName: repoFullName,
+                installationId: { $in: [null, undefined] },
+                active: true,
+            };
+        } else {
+            return [];
+        }
     }
 
     const candidateSubscriptions = await subModel.find(query);

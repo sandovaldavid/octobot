@@ -920,6 +920,16 @@ describe('Security - Multi-Tenant Isolation & Attack Surface Suite', () => {
                 installationId: 1001,
                 status: 'connected',
             });
+            memorySubscriptions.push({
+                _id: 'sub-perm-test-1',
+                installationId: 1001,
+                repositoryId: 101,
+                repositoryFullName: 'org-a/repo-1',
+                guildId: 'guild-perm-test',
+                channelId: 'chan-perm-test',
+                active: true,
+                events: ['issues', 'pull_request', 'push'],
+            });
 
             const readOnlyCommands: Array<{ group: string | null; subcommand: string; options?: any }> = [
                 { group: null, subcommand: 'status' },

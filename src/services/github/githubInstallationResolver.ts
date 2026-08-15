@@ -5,6 +5,7 @@ import {
     GuildNotConnectedError,
     InstallationRevokedError,
     InstallationSuspendedError,
+    RepositoryNotAccessibleError,
 } from '@/types/multiTenantErrors';
 
 export interface IGitHubInstallationResolver {
@@ -36,6 +37,7 @@ export class GitHubInstallationResolver implements IGitHubInstallationResolver {
             if (matched) {
                 return this.validateAndFormatInstallation(matched, matched.installationId);
             }
+            throw new RepositoryNotAccessibleError(repositoryFullName, -1);
         }
 
         const defaultConnection = connections[0];

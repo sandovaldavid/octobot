@@ -394,6 +394,28 @@ describe('Commands - Global /gh Surface & /github Deprecated Alias', () => {
             expect(embedJson.fields[0].name).toContain('#10');
         });
 
+        it('should reject /gh issues list if repository is not actively watched in guild', async () => {
+            mockSubscriptionModel.findOne = mock(() => makeQuery(null));
+
+            const mockInteraction = createMockInteraction({
+                user: { id: 'member-1' },
+                options: {
+                    getSubcommandGroup: () => 'issues',
+                    getSubcommand: () => 'list',
+                    getString: (name: string) => (name === 'repo' ? 'octo-org/unwatched-repo' : null),
+                    getInteger: () => null,
+                },
+                memberPermissions: new PermissionsBitField(0n),
+            });
+
+            await executeGhDispatcher(mockInteraction, false, mockDeps);
+
+            expect(mockInteraction.reply).toHaveBeenCalledTimes(1);
+            const callArg = mockInteraction.reply.mock.calls[0][0];
+            expect(callArg.content).toContain('OctoBot is not watching');
+            expect(callArg.content).toContain('octo-org/unwatched-repo');
+        });
+
         it('should append deprecation notice to /github deprecated command responses', async () => {
             const mockInteraction = createMockInteraction({
                 commandName: 'github',

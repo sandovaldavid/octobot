@@ -300,7 +300,7 @@ export class EventProcessor {
         const instModel = deps?.installationModel ?? GitHubInstallationModel;
         const guildConnModel = deps?.guildConnModel ?? DiscordGuildConnectionModel;
         const subModel = deps?.subModel ?? SubscriptionModel;
-        const clientResolver = deps?.clientResolver ?? this.defaultClientResolver;
+        const clientResolver = deps?.clientResolver !== undefined ? deps.clientResolver : this.defaultClientResolver;
 
         if (eventName === 'installation') {
             switch (action) {
@@ -428,10 +428,24 @@ export class EventProcessor {
                                 }
                             }
                         } catch (error) {
-                            debug.warn(
+                            debug.error(
                                 `Failed to reconcile accessible repositories for installation ${installationId}:`,
                                 error
                             );
+                            const errorMsg = error instanceof Error ? error.message : 'Reconciliation failed';
+                            const result: ProcessingResult = {
+                                deliveryId,
+                                eventName,
+                                outcome: 'failed',
+                                matchedSubscriptions: 0,
+                                attempted: 0,
+                                succeeded: 0,
+                                failed: 1,
+                                durationMs: Date.now() - startTime,
+                                error: `Reconciliation failed: ${errorMsg}`,
+                            };
+                            this.logOutcome(result);
+                            return result;
                         }
                     }
                     break;

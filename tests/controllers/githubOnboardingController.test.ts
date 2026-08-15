@@ -168,11 +168,14 @@ describe('Controller - GitHubOnboardingController', () => {
                 guildId: 'guild-1',
                 initiatedByDiscordUserId: 'user-1',
                 status: 'pending_setup',
-                save: mock(async function (this: any) {
-                    return this;
-                }),
             };
-            mockAttemptModel.findOne = mock(async () => savedAttempt);
+            mockAttemptModel.findOneAndUpdate = mock(async (filter: any, update: any) => {
+                if (filter.status === 'pending_setup') {
+                    Object.assign(savedAttempt, update.$set);
+                    return savedAttempt;
+                }
+                return null;
+            });
 
             const controller = createOnboardingController({
                 appConfig,
@@ -211,7 +214,36 @@ describe('Controller - GitHubOnboardingController', () => {
             // Verify oauthStateHash === SHA256(oauthNonce)
             const computedOAuthStateHash = crypto.createHash('sha256').update(oauthNonce!).digest('hex');
             expect(savedAttempt.oauthStateHash).toBe(computedOAuthStateHash);
-            expect(savedAttempt.save).toHaveBeenCalledTimes(1);
+        });
+
+        it('should atomically allow only one of multiple concurrent setup requests with the same state', async () => {
+            let claimCount = 0;
+            mockAttemptModel.findOneAndUpdate = mock(async (filter: any, update: any) => {
+                if (filter.status === 'pending_setup' && claimCount === 0) {
+                    claimCount++;
+                    return {
+                        _id: 'attempt-concurrent',
+                        status: 'pending_oauth',
+                        ...update.$set,
+                    };
+                }
+                return null;
+            });
+
+            const controller = createOnboardingController({
+                appConfig,
+                attemptModel: mockAttemptModel,
+                installationModel: mockInstallationModel,
+                connectionModel: mockConnectionModel,
+            });
+
+            const { req: req1, res: res1 } = createMockReqRes({ installation_id: '1001', state: 'same-nonce' });
+            const { req: req2, res: res2 } = createMockReqRes({ installation_id: '1001', state: 'same-nonce' });
+
+            await Promise.all([controller.handleSetup(req1, res1), controller.handleSetup(req2, res2)]);
+
+            const statusCodes = [res1.statusCode, res2.statusCode].sort();
+            expect(statusCodes).toEqual([302, 400]);
         });
     });
 

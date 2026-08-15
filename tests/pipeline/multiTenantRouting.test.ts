@@ -490,11 +490,51 @@ describe('Pipeline - Multi-Tenant Routing & Fail-Closed Verification', () => {
             const result = await EventProcessor.process(delivery, {
                 subModel: mockSubModel,
                 installationModel: mockInstModel,
+                clientResolver: null as any,
             });
 
             expect(result.outcome).toBe('succeeded');
             expect(mockSubModel.updateMany).toHaveBeenCalledTimes(1);
             expect(mockInstModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
+        });
+
+        it('should return failed outcome if reconciliation encounters an API failure', async () => {
+            const mockSubModel = {
+                updateMany: mock(async () => ({})),
+                find: mock(async () => []),
+            } as any;
+
+            const mockInstModel = {
+                findOneAndUpdate: mock(async () => ({})),
+            } as any;
+
+            const failingResolver: IGitHubClientResolver = {
+                forInstallation: mock(async () => {
+                    throw new Error('GitHub API Rate Limit / Network Outage');
+                }),
+                invalidate: mock(() => {}),
+            };
+
+            const delivery: VerifiedGithubDelivery = {
+                deliveryId: 'del-inst-repos-reconcile-fail-1',
+                eventName: 'installation_repositories',
+                receivedAt: new Date(),
+                payload: {
+                    action: 'removed',
+                    installation: { id: 5001 },
+                    repository_selection: 'selected',
+                    repositories_removed: [],
+                },
+            };
+
+            const result = await EventProcessor.process(delivery, {
+                subModel: mockSubModel,
+                installationModel: mockInstModel,
+                clientResolver: failingResolver,
+            });
+
+            expect(result.outcome).toBe('failed');
+            expect(result.error).toContain('Reconciliation failed');
         });
 
         it('should reconcile selected repositories if clientResolver is available and prune inaccessible subscriptions', async () => {
