@@ -3,7 +3,7 @@
 **Issue Reference:** [#32](https://github.com/sandovaldavid/octobot/issues/32)  
 **Status:** Approved  
 **Author:** Pair programming (sandovaldavid & Antigravity)  
-**Date:** 2026-08-15  
+**Date:** 2026-08-15
 
 ---
 
@@ -12,6 +12,7 @@
 This specification formalizes the transition of OctoBot from a single-operator bot (utilizing personal access tokens and fixed guild IDs) into an installable multi-tenant Discord and GitHub App integration.
 
 ### Core Architectural Goals
+
 1. **GitHub App Installation Authentication:** Eliminate long-lived `GITHUB_TOKEN` (PAT) as the primary operational model. Use short-lived installation access tokens generated dynamically on-demand via `@octokit/app`.
 2. **Cryptographic Proof-of-Authorization Handshake with PKCE:** Secure onboarding via GitHub App Setup URL + OAuth PKCE verification (`code_challenge` / `code_verifier`) ensuring the candidate installation is accessible to the authenticated GitHub user.
 3. **Decoupled Tenant & Credential Resolvers:** `GitHubInstallationResolver` maps Discord `guildId` to active installations; `GitHubClientResolver` generates and caches scoped `Octokit` instances.
@@ -67,74 +68,79 @@ This specification formalizes the transition of OctoBot from a single-operator b
 ## 3. Data Models (MongoDB)
 
 ### 3.1 `GitHubConnectionAttempt` (Ephemeral Handshake State with PKCE)
+
 Stores the single-use cryptographic state for correlation between Discord interactions and the GitHub redirect flow.
 
 ```ts
 export interface IGitHubConnectionAttempt {
-  installStateHash: string; // SHA-256 of the 256-bit install nonce (Unique index)
-  oauthStateHash?: string; // SHA-256 of the 256-bit oauth nonce (Sparse unique index)
-  oauthCodeVerifier?: string; // Ephemeral PKCE code_verifier (never logged, TTL bounded)
-  guildId: string; // Discord Guild Snowflake
-  initiatedByDiscordUserId: string; // Admin initiating the connection
-  candidateInstallationId?: number; // Captured from /setup before OAuth verification
-  status: 'pending_setup' | 'pending_oauth' | 'verifying' | 'consumed' | 'failed';
-  expiresAt: Date; // TTL Index (expires in 10 minutes)
-  createdAt: Date;
-  updatedAt: Date;
+    installStateHash: string; // SHA-256 of the 256-bit install nonce (Unique index)
+    oauthStateHash?: string; // SHA-256 of the 256-bit oauth nonce (Sparse unique index)
+    oauthCodeVerifier?: string; // Ephemeral PKCE code_verifier (never logged, TTL bounded)
+    guildId: string; // Discord Guild Snowflake
+    initiatedByDiscordUserId: string; // Admin initiating the connection
+    candidateInstallationId?: number; // Captured from /setup before OAuth verification
+    status: 'pending_setup' | 'pending_oauth' | 'verifying' | 'consumed' | 'failed';
+    expiresAt: Date; // TTL Index (expires in 10 minutes)
+    createdAt: Date;
+    updatedAt: Date;
 }
 ```
 
 ### 3.2 `GitHubInstallation` (GitHub App Installation Entity)
+
 Represents the installation lifecycle state on GitHub independently of any Discord tenant mapping.
 
 ```ts
 export interface IGitHubInstallation {
-  installationId: number; // GitHub Installation ID (Unique index)
-  accountId: number; // GitHub Organization or User ID
-  accountLogin: string; // GitHub Organization or User Login (lowercase)
-  accountType: 'Organization' | 'User';
-  status: 'active' | 'suspended' | 'revoked';
-  repositorySelection: 'all' | 'selected';
-  permissions: Record<string, string>;
-  events: string[];
-  createdAt: Date;
-  updatedAt: Date;
+    installationId: number; // GitHub Installation ID (Unique index)
+    accountId: number; // GitHub Organization or User ID
+    accountLogin: string; // GitHub Organization or User Login (lowercase)
+    accountType: 'Organization' | 'User';
+    status: 'active' | 'suspended' | 'revoked';
+    repositorySelection: 'all' | 'selected';
+    permissions: Record<string, string>;
+    events: string[];
+    createdAt: Date;
+    updatedAt: Date;
 }
 ```
 
 ### 3.3 `DiscordGuildConnection` (Tenant Mapping Entity)
+
 Represents the association between a Discord Guild and a GitHub Installation. Supports multiple installations per guild (compound unique index on `[guildId, installationId]`).
 
 ```ts
 export interface IDiscordGuildConnection {
-  guildId: string; // Discord Guild Snowflake (Index)
-  installationId: number; // GitHub Installation ID (Index)
-  status: 'connected' | 'disconnected';
-  connectedByDiscordUserId: string;
-  createdAt: Date;
-  updatedAt: Date;
+    guildId: string; // Discord Guild Snowflake (Index)
+    installationId: number; // GitHub Installation ID (Index)
+    status: 'connected' | 'disconnected';
+    connectedByDiscordUserId: string;
+    createdAt: Date;
+    updatedAt: Date;
 }
 ```
 
 ### 3.4 `Subscription` (Repository Event Routing Entity)
+
 Updated to store both `guildId` and `installationId` for atomic routing without cross-tenant leakage.
 
 ```ts
 export interface ISubscription {
-  repositoryId: number; // GitHub Repository ID
-  repositoryFullName: string; // "owner/repo" (lowercase)
-  installationId: number; // GitHub App Installation ID
-  guildId: string; // Discord Guild Snowflake
-  channelId: string; // Discord Channel Snowflake
-  events: WebhookEventType[];
-  active: boolean;
-  createdByDiscordUserId: string;
-  createdAt: Date;
-  updatedAt: Date;
+    repositoryId: number; // GitHub Repository ID
+    repositoryFullName: string; // "owner/repo" (lowercase)
+    installationId: number; // GitHub App Installation ID
+    guildId: string; // Discord Guild Snowflake
+    channelId: string; // Discord Channel Snowflake
+    events: WebhookEventType[];
+    active: boolean;
+    createdByDiscordUserId: string;
+    createdAt: Date;
+    updatedAt: Date;
 }
 ```
 
 **Indexes for `Subscription`:**
+
 - Compound Unique Index: `{ installationId: 1, repositoryId: 1, guildId: 1, channelId: 1 }` (prevents duplicate subscriptions per channel).
 - Routing Index: `{ installationId: 1, repositoryId: 1, active: 1 }` (optimizes webhook dispatch).
 
@@ -182,26 +188,28 @@ HTTP 200 Success Page: "OctoBot successfully connected to your Discord server! Y
 ## 5. Tenant & Credential Resolvers
 
 ### 5.1 Architectural Separation
+
 ```ts
 export interface GitHubInstallationContext {
-  installationId: number;
-  accountId: number;
-  accountLogin: string;
-  status: 'active' | 'suspended' | 'revoked';
+    installationId: number;
+    accountId: number;
+    accountLogin: string;
+    status: 'active' | 'suspended' | 'revoked';
 }
 
 export interface IGitHubInstallationResolver {
-  resolveForGuild(guildId: string, repositoryFullName?: string): Promise<GitHubInstallationContext>;
-  listForGuild(guildId: string): Promise<GitHubInstallationContext[]>;
+    resolveForGuild(guildId: string, repositoryFullName?: string): Promise<GitHubInstallationContext>;
+    listForGuild(guildId: string): Promise<GitHubInstallationContext[]>;
 }
 
 export interface IGitHubClientResolver {
-  forInstallation(installationId: number): Promise<Octokit>;
-  invalidate(installationId: number): void;
+    forInstallation(installationId: number): Promise<Octokit>;
+    invalidate(installationId: number): void;
 }
 ```
 
 ### 5.2 Client Lifecycle & Invalidation
+
 - `GitHubClientResolver` maintains a singleton instance of `@octokit/app`.
 - Scoped `Octokit` instances for each `installationId` are retrieved via `app.getInstallationOctokit(installationId)`.
 - Internal memory cache is bounded (maximum 500 installations) with 1-hour idle eviction.
@@ -212,55 +220,61 @@ export interface IGitHubClientResolver {
 ## 6. Command Surface & Authorization
 
 ### 6.1 Global Command Registration
+
 - Registered as Global Application Commands with:
-  - `contexts: [InteractionContextType.Guild]`
-  - `integration_types: [ApplicationIntegrationType.GuildInstall]`
+    - `contexts: [InteractionContextType.Guild]`
+    - `integration_types: [ApplicationIntegrationType.GuildInstall]`
 
 ### 6.2 Permission Matrix (`CommandAuthorizationPolicy`)
 
-| Command | Subcommand | Required Permission | Description |
-| :--- | :--- | :--- | :--- |
-| `/gh` | `connect` | `ManageGuild` / `Administrator` | Initiates onboarding handshake |
-| `/gh` | `disconnect` | `ManageGuild` / `Administrator` | Disconnects an installation from guild |
-| `/gh` | `status` | Any Guild Member | Displays bounded connection & subscription state |
-| `/gh` | `repo watch` | `ManageGuild` / `Administrator` | Subscribes channel to repository events |
-| `/gh` | `repo unwatch` | `ManageGuild` / `Administrator` | Removes repository subscription |
-| `/gh` | `repo check` | Any Guild Member | Composite health check (installation, access, subscription, channel) |
-| `/gh` | `issues list` | Any Guild Member | Lists open issues for a watched repository |
-| `/github` | `*` (all) | *Identical to `/gh`* | Deprecated alias with `CommandResponseDecorator` |
+| Command   | Subcommand     | Required Permission             | Description                                                          |
+| :-------- | :------------- | :------------------------------ | :------------------------------------------------------------------- |
+| `/gh`     | `connect`      | `ManageGuild` / `Administrator` | Initiates onboarding handshake                                       |
+| `/gh`     | `disconnect`   | `ManageGuild` / `Administrator` | Disconnects an installation from guild                               |
+| `/gh`     | `status`       | Any Guild Member                | Displays bounded connection & subscription state                     |
+| `/gh`     | `repo watch`   | `ManageGuild` / `Administrator` | Subscribes channel to repository events                              |
+| `/gh`     | `repo unwatch` | `ManageGuild` / `Administrator` | Removes repository subscription                                      |
+| `/gh`     | `repo check`   | Any Guild Member                | Composite health check (installation, access, subscription, channel) |
+| `/gh`     | `issues list`  | Any Guild Member                | Lists open issues for a watched repository                           |
+| `/github` | `*` (all)      | _Identical to `/gh`_            | Deprecated alias with `CommandResponseDecorator`                     |
 
 ### 6.3 Deprecation Decorator (`CommandResponseDecorator`)
+
 When invoked through `/github`:
+
 - Executes identical shared handler logic.
 - Appends an informational notice in embed footer or message text:
-  > *"💡 `/github` is deprecated and will be removed in a future major release. Use `/gh` instead."*
+    > _"💡 `/github` is deprecated and will be removed in a future major release. Use `/gh` instead."_
 
 ---
 
 ## 7. Webhook Pipeline & Lifecycle Events
 
 ### 7.1 Webhook Endpoint
+
 - Standard machine-to-machine endpoint: `POST /api/webhooks/github` (unchanged from V1).
 - Enforces HMAC SHA-256 signature verification (`X-Hub-Signature-256`) and delivery idempotency (`X-GitHub-Delivery`).
 
 ### 7.2 Lifecycle Event Handling
+
 - `event: installation`:
-  - `action: created` ➔ Upsert `GitHubInstallation` as `active`.
-  - `action: deleted` ➔ Update `GitHubInstallation` to `revoked`, mark `DiscordGuildConnection` as `disconnected`, evict from client cache.
-  - `action: suspend` ➔ Update `GitHubInstallation` to `suspended`, evict from client cache.
-  - `action: unsuspend` ➔ Update `GitHubInstallation` to `active`.
+    - `action: created` ➔ Upsert `GitHubInstallation` as `active`.
+    - `action: deleted` ➔ Update `GitHubInstallation` to `revoked`, mark `DiscordGuildConnection` as `disconnected`, evict from client cache.
+    - `action: suspend` ➔ Update `GitHubInstallation` to `suspended`, evict from client cache.
+    - `action: unsuspend` ➔ Update `GitHubInstallation` to `active`.
 - `event: installation_repositories`:
-  - `action: added` ➔ Update `repositorySelection` metadata on `GitHubInstallation` (no repository list mirroring in DB).
-  - `action: removed` ➔ Deactivate matching `Subscription`s and update `repositorySelection` metadata.
-  - *Selection Semantics Reconciliation:* If `repository_selection` changes from `all` to `selected` (where `repositories_removed` may arrive empty), reconcile against GitHub API (`GET /installation/repositories`) to prune subscriptions for inaccessible repositories.
+    - `action: added` ➔ Update `repositorySelection` metadata on `GitHubInstallation` (no repository list mirroring in DB).
+    - `action: removed` ➔ Deactivate matching `Subscription`s and update `repositorySelection` metadata.
+    - _Selection Semantics Reconciliation:_ If `repository_selection` changes from `all` to `selected` (where `repositories_removed` may arrive empty), reconcile against GitHub API (`GET /installation/repositories`) to prune subscriptions for inaccessible repositories.
 
 ### 7.3 Fail-Closed Multi-Tenant Event Routing
+
 - Webhook payload extracts `installation.id` and `repository.id`.
 - Queries active subscriptions: `Subscription.find({ repositoryId, installationId, active: true })`.
 - For each matched subscription, verifies:
-  1. `Subscription.active === true`
-  2. Matching `DiscordGuildConnection.status === 'connected'`
-  3. Matching `GitHubInstallation.status === 'active'`
+    1. `Subscription.active === true`
+    2. Matching `DiscordGuildConnection.status === 'connected'`
+    3. Matching `GitHubInstallation.status === 'active'`
 - Delivers Discord embeds strictly to the verified `guildId` and `channelId`, ensuring total tenant isolation and failing closed on suspended/disconnected states.
 
 ---
@@ -284,6 +298,7 @@ InstallationVerificationError    "The GitHub installation could not be verified 
 ## 9. Environment & Secrets Specification
 
 ### 9.1 Canonical Multi-Tenant Configuration (Required in Production)
+
 ```env
 # GitHub App Configuration
 GITHUB_APP_ID=123456
@@ -304,6 +319,7 @@ API_URL=https://octobot.example.com
 ```
 
 ### 9.2 Legacy Compatibility Configuration (Deprecated in Minor, Removed in Major)
+
 ```env
 # Single-Tenant PAT Mode (Deprecated)
 GITHUB_TOKEN=ghp_xxx
@@ -318,7 +334,7 @@ DISCORD_CHANNEL_ID=123456789012345678
 ## 10. Governance & Release Strategy (SemVer)
 
 - **Phase 1 (Next Minor Release):**
-  - Canonical GitHub App authentication, Setup/OAuth handshake, resolvers, `/gh` command surface, and `/github` deprecation notice.
-  - Legacy PAT mode supported with deprecation warnings.
+    - Canonical GitHub App authentication, Setup/OAuth handshake, resolvers, `/gh` command surface, and `/github` deprecation notice.
+    - Legacy PAT mode supported with deprecation warnings.
 - **Phase 2 (Next Deliberate Major Release):**
-  - Breaking change removal of `/github` command namespace, legacy PAT mode, and legacy environment variables (`GITHUB_TOKEN`, `DISCORD_GUILD_ID`).
+    - Breaking change removal of `/github` command namespace, legacy PAT mode, and legacy environment variables (`GITHUB_TOKEN`, `DISCORD_GUILD_ID`).
