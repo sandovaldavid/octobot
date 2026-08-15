@@ -1,6 +1,6 @@
 import { RepositorySubscriptionModel } from '@models/subscription';
 import { NormalizedGithubEvent } from './types';
-import { WebhookEventType } from '@/types/webhook';
+import { SupportedWebhookEvent } from '@/types/webhook';
 import { debug } from '@utils/logger';
 
 export interface RouteResolution {
@@ -15,11 +15,10 @@ export class SubscriptionRouter {
         }
 
         const repoFullName = event.repositoryFullName.toLowerCase();
-        const shortName = repoFullName.includes('/') ? repoFullName.split('/')[1] : repoFullName;
 
-        // Find active subscriptions matching the repository name
+        // Canonical owner/repo exact matching
         const subscriptions = await RepositorySubscriptionModel.find({
-            repositoryFullName: { $in: [repoFullName, shortName] },
+            repositoryFullName: repoFullName,
             active: true,
         });
 
@@ -28,7 +27,7 @@ export class SubscriptionRouter {
             return { matchedSubscriptionsCount: 0, targetChannelIds: [] };
         }
 
-        const eventType = event.type as WebhookEventType;
+        const eventType = event.type as SupportedWebhookEvent;
         const targetChannelIds: string[] = [];
 
         for (const sub of subscriptions) {

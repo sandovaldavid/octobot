@@ -18,6 +18,16 @@ export const webhookController = {
 
             const result = await EventProcessor.process(delivery);
 
+            if (result.outcome === 'invalid_payload') {
+                res.status(400).json({
+                    success: false,
+                    error: result.error || 'Invalid or malformed webhook payload',
+                    deliveryId,
+                    outcome: result.outcome,
+                });
+                return;
+            }
+
             if (result.outcome === 'failed' && result.error) {
                 res.status(500).json({
                     success: false,
