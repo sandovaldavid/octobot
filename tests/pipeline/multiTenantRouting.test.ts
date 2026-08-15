@@ -1,10 +1,18 @@
-import { describe, expect, it, mock, beforeEach } from 'bun:test';
+import { describe, expect, it, mock, beforeEach, afterEach } from 'bun:test';
 import { routeEventToSubscriptions, SubscriptionRouter } from '../../src/pipeline/router';
 import { EventProcessor } from '../../src/pipeline/processor';
 import { VerifiedGithubDelivery } from '../../src/pipeline/types';
 import { IGitHubClientResolver } from '../../src/services/github/githubClientResolver';
 
 describe('Pipeline - Multi-Tenant Routing & Fail-Closed Verification', () => {
+    beforeEach(() => {
+        EventProcessor.setClientResolver(null);
+    });
+
+    afterEach(() => {
+        EventProcessor.setClientResolver(null);
+    });
+
     describe('routeEventToSubscriptions and SubscriptionRouter', () => {
         it('should route delivery strictly to matching (installationId, repositoryId, guildId)', async () => {
             const mockSubscriptions = [
@@ -448,6 +456,7 @@ describe('Pipeline - Multi-Tenant Routing & Fail-Closed Verification', () => {
 
             const result = await EventProcessor.process(delivery, {
                 installationModel: mockInstModel,
+                clientResolver: null as any,
             });
 
             expect(result.outcome).toBe('succeeded');
