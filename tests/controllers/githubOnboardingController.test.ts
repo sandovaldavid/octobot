@@ -102,7 +102,7 @@ describe('Controller - GitHubOnboardingController', () => {
             expect(expectedHash).toBe(createdAttempt.installStateHash);
         });
 
-        it('should support custom app slug in connect URL', async () => {
+        it('should support custom app slug in connect URL via override', async () => {
             const controller = createOnboardingController({
                 appConfig,
                 attemptModel: mockAttemptModel,
@@ -113,6 +113,36 @@ describe('Controller - GitHubOnboardingController', () => {
 
             const url = await controller.createConnectUrl('guild-123', 'user-456', 'override-slug');
             expect(url).toContain('https://github.com/apps/override-slug/installations/new?state=');
+        });
+
+        it('should use appConfig.appSlug when configured', async () => {
+            const controller = createOnboardingController({
+                appConfig: { ...appConfig, appSlug: 'octobot-dev' },
+                attemptModel: mockAttemptModel,
+                installationModel: mockInstallationModel,
+                connectionModel: mockConnectionModel,
+            });
+
+            const url = await controller.createConnectUrl('guild-123', 'user-456');
+            expect(url).toContain('https://github.com/apps/octobot-dev/installations/new?state=');
+        });
+
+        it('should use process.env.GITHUB_APP_SLUG as fallback when configured in environment', async () => {
+            const origSlug = process.env.GITHUB_APP_SLUG;
+            try {
+                process.env.GITHUB_APP_SLUG = 'env-configured-slug';
+                const controller = createOnboardingController({
+                    appConfig,
+                    attemptModel: mockAttemptModel,
+                    installationModel: mockInstallationModel,
+                    connectionModel: mockConnectionModel,
+                });
+
+                const url = await controller.createConnectUrl('guild-123', 'user-456');
+                expect(url).toContain('https://github.com/apps/env-configured-slug/installations/new?state=');
+            } finally {
+                process.env.GITHUB_APP_SLUG = origSlug;
+            }
         });
     });
 

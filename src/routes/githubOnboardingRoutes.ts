@@ -11,11 +11,13 @@ export function createGitHubOnboardingRouter(controller?: GitHubOnboardingContro
 
     const resolveController = (): GitHubOnboardingController => {
         if (!activeController) {
+            const appConfig = getGitHubAppConfig();
             activeController = createOnboardingController({
-                appConfig: getGitHubAppConfig(),
+                appConfig,
                 installationModel: GitHubInstallationModel,
                 connectionModel: DiscordGuildConnectionModel,
                 attemptModel: GitHubConnectionAttemptModel,
+                appSlug: appConfig.appSlug || process.env.GITHUB_APP_SLUG || 'octobot',
             });
         }
         return activeController;

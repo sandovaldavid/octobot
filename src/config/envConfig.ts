@@ -26,6 +26,7 @@ export interface AppEnv {
     GITHUB_APP_PRIVATE_KEY?: string;
     GITHUB_CLIENT_ID?: string;
     GITHUB_CLIENT_SECRET?: string;
+    GITHUB_APP_SLUG?: string;
 }
 
 export function validateEnv(customEnv?: Record<string, string | undefined>): AppEnv {
@@ -77,6 +78,7 @@ export function validateEnv(customEnv?: Record<string, string | undefined>): App
             GITHUB_APP_PRIVATE_KEY: appConfig.privateKey,
             GITHUB_CLIENT_ID: appConfig.clientId,
             GITHUB_CLIENT_SECRET: appConfig.clientSecret,
+            GITHUB_APP_SLUG: appConfig.appSlug,
         };
     }
 

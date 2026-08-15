@@ -4,6 +4,7 @@ export interface GitHubAppConfig {
     webhookSecret: string;
     clientId: string;
     clientSecret: string;
+    appSlug?: string;
 }
 
 export function validateGitHubAppEnv(env: Record<string, string | undefined> = process.env): GitHubAppConfig {
@@ -12,6 +13,7 @@ export function validateGitHubAppEnv(env: Record<string, string | undefined> = p
     const webhookSecret = env.GITHUB_WEBHOOK_SECRET;
     const clientId = env.GITHUB_CLIENT_ID;
     const clientSecret = env.GITHUB_CLIENT_SECRET;
+    const appSlug = env.GITHUB_APP_SLUG?.trim() || undefined;
 
     if (!appIdStr || isNaN(Number(appIdStr)) || appIdStr.trim() === '') {
         throw new Error('Invalid or missing GITHUB_APP_ID (must be numeric string)');
@@ -35,6 +37,7 @@ export function validateGitHubAppEnv(env: Record<string, string | undefined> = p
         webhookSecret,
         clientId,
         clientSecret,
+        appSlug,
     };
 }
 

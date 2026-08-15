@@ -88,7 +88,7 @@ export function createOnboardingController(deps: GitHubOnboardingControllerDeps)
                 expiresAt,
             });
 
-            const slug = appSlug || deps.appSlug || 'octobot';
+            const slug = appSlug || deps.appSlug || deps.appConfig?.appSlug || process.env.GITHUB_APP_SLUG || 'octobot';
             return `https://github.com/apps/${slug}/installations/new?state=${installNonce}`;
         },
 

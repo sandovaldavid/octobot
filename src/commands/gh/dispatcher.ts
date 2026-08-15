@@ -57,16 +57,18 @@ export async function executeGhDispatcher(
     const group = interaction.options.getSubcommandGroup(false);
     const subcommand = interaction.options.getSubcommand(false);
 
+    const appConfig = getGitHubAppConfig();
     const resolvedDeps: Required<GhCommandDeps> = {
         installationResolver: deps?.installationResolver ?? getGitHubInstallationResolver(),
         clientResolver: deps?.clientResolver ?? getGitHubClientResolver(),
         onboardingController:
             deps?.onboardingController ??
             createOnboardingController({
-                appConfig: getGitHubAppConfig(),
+                appConfig,
                 installationModel: GitHubInstallationModel,
                 connectionModel: DiscordGuildConnectionModel,
                 attemptModel: GitHubConnectionAttemptModel,
+                appSlug: appConfig.appSlug || process.env.GITHUB_APP_SLUG || 'octobot',
             }),
         subscriptionModel: deps?.subscriptionModel ?? SubscriptionModel,
         guildConnectionModel: deps?.guildConnectionModel ?? DiscordGuildConnectionModel,

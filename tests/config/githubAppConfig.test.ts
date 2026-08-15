@@ -14,13 +14,19 @@ describe('Config - GitHubAppConfig', () => {
         GITHUB_CLIENT_SECRET: 'test_client_secret',
     };
 
-    it('should parse valid GitHub App environment variables', () => {
-        const config = validateGitHubAppEnv(validEnv);
+    it('should parse valid GitHub App environment variables with optional appSlug', () => {
+        const config = validateGitHubAppEnv({ ...validEnv, GITHUB_APP_SLUG: 'custom-octobot-slug' });
         expect(config.appId).toBe(123456);
         expect(config.privateKey).toBe('-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----');
         expect(config.webhookSecret).toBe('test_webhook_secret');
         expect(config.clientId).toBe('Iv1.test_client_id');
         expect(config.clientSecret).toBe('test_client_secret');
+        expect(config.appSlug).toBe('custom-octobot-slug');
+    });
+
+    it('should leave appSlug undefined when GITHUB_APP_SLUG is not provided', () => {
+        const config = validateGitHubAppEnv(validEnv);
+        expect(config.appSlug).toBeUndefined();
     });
 
     it('should handle escaped newlines in private key', () => {
