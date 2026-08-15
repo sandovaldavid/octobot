@@ -4,17 +4,12 @@ import {
     InteractionContextType,
     SlashCommandBuilder,
 } from 'discord.js';
-import { validateEnv } from '@config/envConfig';
-import { executeGhDispatcher } from '../gh/dispatcher';
-import { watch } from './repos/watch';
-import { unwatch } from './repos/unwatch';
-import { checkWebhook } from './repos/checkWebhook';
-import { list } from './issues/list';
+import { executeGhDispatcher } from './dispatcher';
 
-export const github = {
+export const ghCommand = {
     data: new SlashCommandBuilder()
-        .setName('github')
-        .setDescription('[Deprecated] GitHub workflow assistant commands. Use /gh instead.')
+        .setName('gh')
+        .setDescription('GitHub integration and multi-tenant management')
         .setContexts(InteractionContextType.Guild)
         .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
         // Subcommand: connect
@@ -39,7 +34,7 @@ export const github = {
         .addSubcommandGroup((group) =>
             group
                 .setName('repo')
-                .setDescription('Repository subscription and health commands')
+                .setDescription('Manage repository subscriptions and status')
                 .addSubcommand((subcommand) =>
                     subcommand
                         .setName('watch')
@@ -79,23 +74,12 @@ export const github = {
                                 .setRequired(true)
                         )
                 )
-                .addSubcommand((subcommand) =>
-                    subcommand
-                        .setName('check-webhook')
-                        .setDescription('Check if a repository has an active webhook configured')
-                        .addStringOption((option) =>
-                            option
-                                .setName('name')
-                                .setDescription('Repository name (e.g. owner/repo or repo)')
-                                .setRequired(true)
-                        )
-                )
         )
         // Subcommand Group: issues
         .addSubcommandGroup((group) =>
             group
                 .setName('issues')
-                .setDescription('Issue query commands')
+                .setDescription('Query GitHub issues')
                 .addSubcommand((subcommand) =>
                     subcommand
                         .setName('list')
@@ -127,37 +111,8 @@ export const github = {
         ),
 
     async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-        let authMode: 'github_app' | 'legacy_pat' = 'github_app';
-        try {
-            const env = validateEnv();
-            authMode = env.authMode;
-        } catch {
-            authMode = process.env.GITHUB_TOKEN && !process.env.GITHUB_APP_ID ? 'legacy_pat' : 'github_app';
-        }
-
-        if (authMode === 'github_app') {
-            await executeGhDispatcher(interaction, true);
-            return;
-        }
-
-        // Legacy PAT Mode dispatching
-        const group = interaction.options.getSubcommandGroup(false);
-        const subcommand = interaction.options.getSubcommand(false);
-
-        if (group === 'repo') {
-            if (subcommand === 'watch') return watch.execute(interaction);
-            if (subcommand === 'unwatch') return unwatch.execute(interaction);
-            if (subcommand === 'check-webhook' || subcommand === 'check') return checkWebhook.execute(interaction);
-        } else if (group === 'issues') {
-            if (subcommand === 'list') return list.execute(interaction);
-        }
-
-        await interaction.reply({
-            content:
-                '⚠️ This command is only supported in GitHub App mode. Please upgrade your deployment to use GitHub App.',
-            ephemeral: true,
-        });
+        await executeGhDispatcher(interaction, false);
     },
 };
 
-export default github;
+export default ghCommand;

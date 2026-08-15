@@ -5,18 +5,18 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.13.1-brightgreen.svg)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> Asistente de Discord orientado a eventos para equipos de ingeniería. Notifica en tiempo real eventos de GitHub (commits, pull requests, issues, releases y ramas) hacia canales autorizados de Discord, manteniendo a **GitHub como la única fuente de la verdad**.
+> Asistente de Discord multi-tenant orientado a eventos para equipos de ingeniería. Notifica en tiempo real eventos de GitHub (commits, pull requests, issues, releases, ramas y workflows de CI) hacia canales autorizados de Discord, manteniendo a **GitHub como la única fuente de la verdad**.
 
 ---
 
 ## 📋 Tabla de Contenidos
 
 - [Propósito y Límites](#-propósito-y-límites)
-- [Arquitectura y Persistencia](#-arquitectura-y-persistencia)
+- [Arquitectura y Persistencia Multi-Tenant](#-arquitectura-y-persistencia-multi-tenant)
 - [Límites de Seguridad y Permisos](#-límites-de-seguridad-y-permisos)
 - [Requisitos](#-requisitos)
 - [Instalación y Configuración](#-instalación-y-configuración)
-- [Comandos de Discord](#-comandos-de-discord-slash-commands)
+- [Comandos de Discord (Slash Commands)](#-comandos-de-discord-slash-commands)
 - [Superficie HTTP](#-superficie-http)
 - [Docker y Base de Datos](#-docker-y-base-de-datos)
 - [Scripts Disponibles](#-scripts-disponibles)
@@ -27,94 +27,82 @@
 
 ## 🎯 Propósito y Límites
 
-OctoBot está diseñado como un **GitHub Workflow Assistant** enfocado y seguro:
+OctoBot está diseñado como un **GitHub Workflow Assistant** enfocado, multi-tenant y seguro:
 
-- 🔔 **Event-driven:** Reacciona a webhooks firmados de GitHub y los canaliza hacia Discord.
-- 📖 **GitHub como Source of Truth:** No replica ni almacena copias de repositorios, issues ni commits. Las consultas se realizan en vivo vía Octokit.
-- 🛡️ **Superficie HTTP Mínima:** Expone únicamente el receptor de webhooks con firma HMAC SHA-256 (`/api/webhooks/github`) y un healthcheck (`/health`).
-- 🔐 **Control de Acceso:** La gestión de suscripciones se realiza exclusivamente mediante Slash Commands en Discord protegidos por permisos de servidor (`Administrator` / `ManageGuild`).
+- 🔔 **Event-driven:** Reacciona a webhooks firmados de GitHub App y los canaliza hacia los canales suscritos de Discord.
+- 🏢 **Multi-Tenant:** Soporta múltiples servidores de Discord y múltiples organizaciones/cuentas de GitHub aisladas de forma estricta.
+- 📖 **GitHub como Source of Truth:** No replica repositorios, issues ni commits en base de datos.
+- 🛡️ **Superficie HTTP Mínima:** Expone únicamente el receptor de webhooks (`/api/webhooks/github`), el handshake de onboarding (`/api/github/setup`, `/api/github/callback`) y sondas de salud (`/health`, `/ready`).
+- 🔐 **Control de Acceso:** La gestión de suscripciones se realiza exclusivamente mediante Slash Commands globales `/gh` protegidos por permisos de servidor (`Administrator` / `ManageGuild`).
 
 ---
 
-## 🏛️ Arquitectura y Persistencia
+## 🏛️ Arquitectura y Persistencia Multi-Tenant
 
 ```mermaid
 graph TD
-    subgraph GitHub [GitHub Source of Truth]
-        GH_Hook[GitHub Webhooks]
-        GH_API[GitHub REST API]
+    subgraph GitHub [GitHub Cloud]
+        GH_App[GitHub App Webhooks]
+        GH_OAuth[OAuth 2.0 PKCE]
+        GH_API[Installation REST API]
     end
 
     subgraph OctoBot [OctoBot Runtime]
         Ingress[Express Ingress: /api/webhooks/github]
         HMAC[verifyGithubWebhook Middleware]
-        Handler[Webhook Event Handler]
+        Onboard[Onboarding Controller: /setup & /callback]
+        Router[Fail-Closed Subscription Router]
         DiscordClient[Discord Bot Client]
-        IssueSvc[Live Issue Query Service]
+        ClientResolver[GitHubClientResolver]
     end
 
     subgraph Storage [MongoDB: Operational State Only]
-        Subs[(RepositorySubscriptions)]
+        Insts[(GitHubInstallations)]
+        Conns[(DiscordGuildConnections)]
+        Subs[(Subscriptions)]
+        Attempts[(GitHubConnectionAttempts - TTL)]
+        Deliveries[(WebhookDeliveries - TTL)]
     end
 
-    GH_Hook -->|POST rawBody + x-hub-signature-256| Ingress
+    GH_App -->|POST rawBody + x-hub-signature-256| Ingress
     Ingress --> HMAC
-    HMAC --> Handler
-    Handler -->|Lookup Target Channel| Subs
-    Handler -->|Dispatch Notification Embed| DiscordClient
+    HMAC --> Router
+    Router -->|Verify Tenant Connection| Conns
+    Router -->|Verify Installation Status| Insts
+    Router -->|Match Channel Subscriptions| Subs
+    Router -->|Dispatch Notification Embed| DiscordClient
     DiscordClient -->|Alerts| DiscordChannel[Discord Channel]
 
-    DiscordUser[Discord User] -->|/github issues list repo:octobot| DiscordClient
-    DiscordClient --> IssueSvc
-    IssueSvc -->|Live API Read with PR filter| GH_API
+    DiscordAdmin[Discord Admin] -->|/gh connect| DiscordClient
+    DiscordClient -->|Generate Signed Nonce| Onboard
+    Onboard -->|PKCE Exchange & Verify Association| GH_OAuth
+    Onboard -->|Upsert Tenant Link| Conns
+    Onboard -->|Upsert Installation| Insts
 
-    DiscordAdmin[Discord Admin] -->|/github repo watch / unwatch| DiscordClient
-    DiscordClient -->|Manage Subscriptions| Subs
+    DiscordUser[Discord User] -->|/gh issues list| DiscordClient
+    DiscordClient --> ClientResolver
+    ClientResolver -->|Installation-scoped client| GH_API
 ```
 
-### Datos Persistidos en MongoDB (`RepositorySubscription`, `WorkflowAlertState` y `WebhookDelivery`)
+### Datos Persistidos en MongoDB
 
-MongoDB almacena **únicamente datos operativos propiedad de OctoBot**:
+MongoDB almacena **únicamente datos operativos y de relación tenant propiedad de OctoBot**:
 
-- `RepositorySubscription`:
-
-    - `repositoryFullName`: Nombre del repositorio (e.g. `owner/repo`).
-    - `guildId`: ID del servidor de Discord.
-    - `channelId`: ID del canal de Discord configurado para recibir alertas.
-    - `events`: Tipos de eventos suscritos (`push`, `pull_request`, `pull_request_review`, `workflow_run`, `issues`, etc.).
-    - `active`: Estado booleano de la suscripción.
-    - `createdAt`, `updatedAt`: Marcas temporales.
-
-- `WorkflowAlertState`:
-
-    - `repositoryFullName`, `workflowId`, `headBranch`: Clave única compuesta para seguimiento de salud de CI.
-    - `state`: Estado actual (`healthy` | `failing`).
-    - `lastRunId`, `lastRunNumber`, `lastRunAttempt`: Identificadores para deduplicación y protección contra entregas fuera de orden.
-    - `lastFailureRunId`, `lastFailureAt`: Metadatos del último fallo registrado.
-
-- `WebhookDelivery` (Idempotencia y Protección Replay):
-    - `deliveryId`: GUID global único de entrega de GitHub (`X-GitHub-Delivery`).
-    - `eventName`: Nombre del evento de transporte.
-    - `status`: Estado del ciclo de vida (`processing` | `completed` | `rejected` | `retryable_failed`).
-    - `leaseExpiresAt`: Lease de procesamiento (60 segundos) para recuperación atómica segura ante caídas.
-    - `expiresAt`: Retención de 7 días mediante índice TTL de MongoDB (`expireAfterSeconds: 0`).
+- `GitHubInstallation`: Metadatos de la instalación de GitHub App (`installationId`, `accountId`, `accountLogin`, `accountType`, `status: active|suspended|revoked`, `repositorySelection`).
+- `DiscordGuildConnection`: Vinculación compuesta `[guildId, installationId]` con estado `connected|disconnected`.
+- `GitHubConnectionAttempt`: Registro efímero con TTL de 10 minutos para nonces y desafío PKCE contra ataques de replay y CSRF.
+- `Subscription`: Suscripciones por canal `[installationId, repositoryId, guildId, channelId]`.
+- `WorkflowAlertState`: Seguimiento compuesto de salud de CI (`healthy` | `failing`) con deduplicación por run/attempt.
+- `WebhookDelivery`: Registro de idempotencia por `deliveryId` (`X-GitHub-Delivery`) con lease atómico de 60s y TTL de 7 días.
 
 ---
 
 ## 🔒 Límites de Seguridad y Permisos
 
-### Capacidades GitHub Requeridas
+### Permisos de Discord
 
-- Lectura de metadata de repositorios suscritos;
-- Lectura de issues en vivo para el comando `/github issues list`;
-- Lectura de ejecuciones de GitHub Actions (`Actions: read`) para alertas de CI/CD (`workflow_run`);
-- Creación y eliminación de repository webhooks (`watch`, `unwatch`).
-
-OctoBot **no cuenta ni requiere** capacidades para:
-
-- Crear o eliminar repositorios;
-- Modificar visibilidad (público/privado);
-- Renombrar repositorios o alterar topics.
+- Comandos de mutación (`/gh connect`, `/gh disconnect`, `/gh repo watch`, `/gh repo unwatch`) requieren permisos de **Administrator** o **Manage Server** (`ManageGuild`).
+- Comandos de consulta (`/gh status`, `/gh repo check`, `/gh issues list`) son de solo lectura y están disponibles para todos los miembros del servidor.
 
 ---
 
@@ -122,9 +110,8 @@ OctoBot **no cuenta ni requiere** capacidades para:
 
 - [Bun](https://bun.sh) `>=1.2.0` o [Node.js](https://nodejs.org) `>=22.13.1`
 - Docker y Docker Compose para MongoDB
-- Aplicación de Discord registrada en [Discord Developer Portal](https://discord.com/developers/applications)
-- Token de GitHub (`GITHUB_TOKEN`)
-- Clave secreta para webhooks (`GITHUB_WEBHOOK_SECRET`)
+- Bot de Discord registrado en [Discord Developer Portal](https://discord.com/developers/applications)
+- GitHub App configurada con permisos de Repository (Issues, Pull requests, Actions) y Webhooks.
 
 ---
 
@@ -149,88 +136,65 @@ OctoBot **no cuenta ni requiere** capacidades para:
     cp .env.example .env
     ```
 
-4. **Variables requeridas en `.env`:**
+4. **Variables en `.env` (Modo Canónico GitHub App):**
 
     ```env
     PORT=4000
-    NODE_ENV=development
+    NODE_ENV=production
 
-    # Discord
     DISCORD_TOKEN=your_discord_bot_token
-    DISCORD_CHANNEL_ID=your_default_channel_id
-    DISCORD_GUILD_ID=your_guild_id
     DISCORD_CLIENT_ID=your_client_id
-
-    # MongoDB (para RepositorySubscriptions)
-    MONGO_USER=dev-octobot
-    MONGO_PASSWORD=your_password
-    MONGO_DATABASE=db-octobot
-    MONGODB_URI=mongodb://dev-octobot:your_password@localhost:27017/db-octobot?authSource=admin
-
-    # GitHub
-    GITHUB_TOKEN=your_github_token
-    GITHUB_OWNER=your_github_username_or_org
-    GITHUB_REPO=your_default_repo
-    GITHUB_WEBHOOK_SECRET=your_webhook_secret_key
     API_URL=https://your-public-octobot-url.example
+
+    MONGODB_URI=mongodb://user:password@localhost:27017/octobot?authSource=admin
+
+    GITHUB_APP_ID=123456
+    GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+    GITHUB_WEBHOOK_SECRET=your_webhook_secret_key
+    GITHUB_CLIENT_ID=your_github_oauth_client_id
+    GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
     ```
 
 ---
 
 ## 💬 Comandos de Discord (Slash Commands)
 
-Todos los comandos están agrupados bajo `/github`:
+La superficie canónica de comandos es **`/gh`** (global):
 
-| Grupo    | Comando                      | Parámetros                                               | Descripción                                                                                                          |
-| -------- | ---------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `repo`   | `/github repo watch`         | `name:<repo>` (requerido)                                | Configura el webhook en GitHub y crea la suscripción para el canal actual. Requiere `Administrator` o `ManageGuild`. |
-| `repo`   | `/github repo unwatch`       | `name:<repo>` (requerido)                                | Elimina la suscripción del canal y retira el webhook de GitHub si no hay otros canales suscritos.                    |
-| `repo`   | `/github repo check-webhook` | `name:<repo>` (requerido)                                | Verifica si el webhook está activo en GitHub y muestra el canal suscrito.                                            |
-| `issues` | `/github issues list`        | `repo:<nombre>` (requerido), `state:[open\|closed\|all]` | Consulta issues en vivo desde GitHub con paginación interactiva por botones.                                         |
+| Grupo    | Comando            | Parámetros                                               | Descripción                                                                                                |
+| -------- | ------------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| —        | `/gh connect`      | —                                                        | Inicia el flujo seguro de vinculación mediante GitHub App y verificación PKCE. Requiere permisos de Admin. |
+| —        | `/gh disconnect`   | `installation_id` (opcional)                             | Desvincula una instalación de GitHub de este servidor. Requiere permisos de Admin.                         |
+| —        | `/gh status`       | —                                                        | Muestra las organizaciones conectadas, estado de instalaciones y repositorios suscritos en este servidor.  |
+| `repo`   | `/gh repo watch`   | `name:<repo>` (requerido), `events` (opcional)           | Suscribe el canal actual a eventos del repositorio. Requiere permisos de Admin.                            |
+| `repo`   | `/gh repo unwatch` | `name:<repo>` (requerido)                                | Desuscribe el canal actual de eventos del repositorio. Requiere permisos de Admin.                         |
+| `repo`   | `/gh repo check`   | `name:<repo>` (requerido)                                | Realiza un diagnóstico compuesto de salud de la integración del repositorio.                               |
+| `issues` | `/gh issues list`  | `repo:<nombre>` (requerido), `state:[open\|closed\|all]` | Lista issues en vivo del repositorio verificado y suscrito en el servidor.                                 |
+
+> [!NOTE]
+> `/github` se mantiene como alias retrocompatible con aviso de deprecación en modo GitHub App, y como ejecutor de comandos V1 en modo `legacy_pat`.
 
 ---
 
 ## 🌐 Superficie HTTP
 
-### Endpoints Disponibles
-
-- `GET /health` — **Liveness Probe**: Estado del proceso HTTP y uptime (sin secretos).
+- `POST /api/webhooks/github` — Receptor de eventos GitHub (firmado con HMAC SHA-256 sobre rawBody e idempotente por `X-GitHub-Delivery`).
+- `GET /api/github/setup` — Endpoint de redirección tras instalación de la GitHub App.
+- `GET /api/github/callback` — Endpoint de callback OAuth 2.0 PKCE para prueba de asociación y reclamo seguro.
+- `GET /health` — **Liveness Probe**: Estado del proceso HTTP y uptime.
 - `GET /ready` — **Readiness Probe**: Verifica conectividad activa con Discord Gateway y MongoDB (`200 READY` o `503 UNREADY`).
-- `POST /api/webhooks/github` — Receptor principal de eventos GitHub (protegido por middleware HMAC SHA-256 sobre `rawBody` con deduplicación atómica por `X-GitHub-Delivery`).
-
-### Endpoints Eliminados (`404`)
-
-- `/api/repositories/*` — `404 Not Found`.
-- `/api/issues/*` — `404 Not Found`.
-- `POST /api/webhooks/github/test` — `404 Not Found`.
-- `POST /api/webhooks/github/repository/:repoName` — `404 Not Found`.
 
 ---
 
-## 🐳 Despliegue y Contenedores
-
-### Producción (Docker)
+## 🐳 Docker y Despliegue
 
 ```bash
 docker build -t octobot:1.0.0 -f Dockerfile .
 docker run -d --name octobot -p 4000:4000 --env-file .env octobot:1.0.0
 ```
 
-Para detalles completos de arquitectura, topología, proxies inversos HTTPS y rollback, consulta:
-
 - 📖 **[Guía de Despliegue en Producción (DEPLOYMENT.md)](docs/DEPLOYMENT.md)**
 - 🧪 **[Guía de Onboarding y Smoke Tests del Piloto (PILOT.md)](docs/PILOT.md)**
-
-### Entorno Local de Desarrollo (MongoDB)
-
-Para levantar el contenedor local de MongoDB para desarrollo:
-
-```bash
-docker compose -f docker-compose.development.yml up -d
-```
-
-- **MongoDB:** `localhost:27017`
-- **Mongo Express:** `http://localhost:8081`
 
 ---
 
@@ -239,45 +203,13 @@ docker compose -f docker-compose.development.yml up -d
 ```bash
 bun run dev          # Iniciar con hot reload
 bun run start        # Iniciar en producción
-bun test             # Ejecutar suite de pruebas unitarias
+bun run build        # Compilar bundle de producción (dist/index.js)
+bun test             # Ejecutar suite de pruebas unitarias e integración
 bun run typecheck    # Verificación estática TypeScript (tsc --noEmit)
 bun run lint         # Análisis estático de código (ESLint 9)
 bun run format:check # Comprobación de formato (Prettier)
 bun run format       # Autoformateo de código
 ```
-
----
-
-## 🧪 Pruebas Automatizadas y CI
-
-La calidad del código y la confiabilidad del pipeline se validan de forma continua mediante GitHub Actions (`CI / validate`):
-
-```bash
-bun run typecheck    # Verificación estática TypeScript (tsc --noEmit)
-bun run lint         # Análisis estático de código (ESLint 9)
-bun run format:check # Comprobación de formato (Prettier)
-bun test             # Suite completa de pruebas unitarias e integración
-```
-
-Suites de pruebas automatizadas:
-
-- `tests/config/envConfig.test.ts` (validación de variables de entorno)
-- `tests/controllers/webhookController.test.ts` (ingress de webhooks e idempotencia)
-- `tests/integration/webhookE2E.test.ts` (suite E2E HTTP del pipeline y fan-out)
-- `tests/middlewares/verifyGithubWebhook.test.ts` (verificación de firma HMAC)
-- `tests/models/subscription.test.ts` (esquema e invariantes de suscripciones)
-- `tests/models/webhookDelivery.test.ts` (esquema e índices TTL de deduplicación)
-- `tests/models/workflowAlertState.test.ts` (modelo de estado y transición de CI)
-- `tests/pipeline/normalizer.test.ts` (normalización tipada de eventos GitHub)
-- `tests/pipeline/policy.test.ts` (política de reducción de ruido)
-- `tests/pipeline/processor.test.ts` (orquestación del pipeline y control flow)
-- `tests/security/publicApiSurface.test.ts` (verificación de superficie HTTP e inmunidad de rutas 404)
-- `tests/services/deliveryIdempotencyService.test.ts` (reclamo atómico y leases de entrega)
-- `tests/services/discordService.test.ts` (formateo y color de notificaciones)
-- `tests/services/repositoryService.test.ts` (mapeo de datos de GitHub)
-- `tests/services/webhookService.test.ts` (construcción de webhooks)
-- `tests/services/workflowStateService.test.ts` (alertas de fallo y recuperación de CI)
-- `tests/utils/validators.test.ts` (validadores de snowflakes, URLs y nombres)
 
 ---
 

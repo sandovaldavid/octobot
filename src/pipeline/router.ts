@@ -1,29 +1,145 @@
-import { RepositorySubscriptionModel } from '@models/subscription';
+import { SubscriptionModel, ISubscription } from '../models/subscription';
+import { DiscordGuildConnectionModel } from '../models/discordGuildConnection';
+import { GitHubInstallationModel } from '../models/githubInstallation';
 import { NormalizedGithubEvent } from './types';
-import { SupportedWebhookEvent } from '@/types/webhook';
-import { debug } from '@utils/logger';
+import { SupportedWebhookEvent } from '../types/webhook';
+import { debug } from '../utils/logger';
 
 export interface RouteResolution {
     matchedSubscriptionsCount: number;
     targetChannelIds: string[];
 }
 
+export interface RouteDependencies {
+    subModel?: typeof SubscriptionModel;
+    guildConnModel?: typeof DiscordGuildConnectionModel;
+    instModel?: typeof GitHubInstallationModel;
+}
+
+export interface EventRoutingContext {
+    repositoryId?: number;
+    installationId?: number;
+    repositoryFullName?: string;
+    type?: string;
+}
+
+export async function routeEventToSubscriptions(
+    event: EventRoutingContext,
+    deps?: RouteDependencies
+): Promise<ISubscription[]> {
+    const subModel = deps?.subModel ?? SubscriptionModel;
+    const guildConnModel = deps?.guildConnModel ?? DiscordGuildConnectionModel;
+    const instModel = deps?.instModel ?? GitHubInstallationModel;
+
+    const repoFullName = event.repositoryFullName?.toLowerCase().trim();
+    const repositoryId = event.repositoryId;
+    const installationId = event.installationId;
+
+    if (!repositoryId && !repoFullName && !installationId) {
+        return [];
+    }
+
+    let query: any;
+
+    if (installationId) {
+        // Strict GitHub App routing: matches only subscriptions created under this installationId
+        if (repositoryId) {
+            query = { installationId, repositoryId, active: true };
+        } else if (repoFullName) {
+            query = { installationId, repositoryFullName: repoFullName, active: true };
+        } else {
+            query = { installationId, active: true };
+        }
+    } else {
+        // Strict Legacy PAT routing: matches only legacy subscriptions without an installationId
+        if (repositoryId) {
+            query = {
+                repositoryId,
+                installationId: { $in: [null, undefined] },
+                active: true,
+            };
+        } else if (repoFullName) {
+            query = {
+                repositoryFullName: repoFullName,
+                installationId: { $in: [null, undefined] },
+                active: true,
+            };
+        } else {
+            return [];
+        }
+    }
+
+    const candidateSubscriptions = await subModel.find(query);
+    if (!candidateSubscriptions || candidateSubscriptions.length === 0) {
+        return [];
+    }
+
+    const verifiedSubscriptions: ISubscription[] = [];
+
+    for (const sub of candidateSubscriptions) {
+        if (!sub.active) {
+            continue;
+        }
+
+        if (sub.installationId) {
+            // Fail-closed 3-point check: Guild connection & GitHub Installation
+            if (!sub.guildId) {
+                continue;
+            }
+
+            const guildConnection = await guildConnModel.findOne({
+                guildId: sub.guildId,
+                installationId: sub.installationId,
+                status: 'connected',
+            });
+
+            if (!guildConnection || guildConnection.status !== 'connected') {
+                continue;
+            }
+
+            const installation = await instModel.findOne({
+                installationId: sub.installationId,
+                status: 'active',
+            });
+
+            if (!installation || installation.status !== 'active') {
+                continue;
+            }
+        }
+
+        verifiedSubscriptions.push(sub);
+    }
+
+    return verifiedSubscriptions;
+}
+
 export class SubscriptionRouter {
-    static async resolveTargetChannels(event: NormalizedGithubEvent): Promise<RouteResolution> {
-        if (event.type === 'ping' || event.type === 'unsupported' || !event.repositoryFullName) {
+    static async resolveTargetChannels(
+        event: NormalizedGithubEvent,
+        deps?: RouteDependencies
+    ): Promise<RouteResolution> {
+        if (
+            event.type === 'ping' ||
+            event.type === 'unsupported' ||
+            (!event.repositoryFullName && !event.repositoryId)
+        ) {
             return { matchedSubscriptionsCount: 0, targetChannelIds: [] };
         }
 
-        const repoFullName = event.repositoryFullName.toLowerCase();
-
-        // Canonical owner/repo exact matching
-        const subscriptions = await RepositorySubscriptionModel.find({
-            repositoryFullName: repoFullName,
-            active: true,
-        });
+        const subscriptions = await routeEventToSubscriptions(
+            {
+                repositoryId: event.repositoryId,
+                installationId: event.installationId,
+                repositoryFullName: event.repositoryFullName,
+                type: event.type,
+            },
+            deps
+        );
 
         if (subscriptions.length === 0) {
-            debug.info(`No active subscriptions found for repository: ${repoFullName}`);
+            debug.info(
+                `No verified active subscriptions found for repository: ${event.repositoryFullName || event.repositoryId || 'N/A'}`
+            );
             return { matchedSubscriptionsCount: 0, targetChannelIds: [] };
         }
 

@@ -4,7 +4,7 @@ import { webhookService } from '@services/github/webhookService';
 import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { createCommand } from '@utils/commandBuilder';
-import { DEFAULT_SUBSCRIPTION_EVENTS } from '../../../types/webhook';
+import { DEFAULT_SUBSCRIPTION_EVENTS } from '@/types/webhook';
 
 export const watch = createCommand({
     name: 'github',
