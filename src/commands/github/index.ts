@@ -4,7 +4,12 @@ import {
     InteractionContextType,
     SlashCommandBuilder,
 } from 'discord.js';
+import { validateEnv } from '@config/envConfig';
 import { executeGhDispatcher } from '../gh/dispatcher';
+import { watch } from './repos/watch';
+import { unwatch } from './repos/unwatch';
+import { checkWebhook } from './repos/checkWebhook';
+import { list } from './issues/list';
 
 export const github = {
     data: new SlashCommandBuilder()
@@ -122,7 +127,36 @@ export const github = {
         ),
 
     async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-        await executeGhDispatcher(interaction, true);
+        let authMode = 'github_app';
+        try {
+            const env = validateEnv();
+            authMode = env.authMode;
+        } catch {
+            authMode = 'github_app';
+        }
+
+        if (authMode === 'github_app') {
+            await executeGhDispatcher(interaction, true);
+            return;
+        }
+
+        // Legacy PAT Mode dispatching
+        const group = interaction.options.getSubcommandGroup(false);
+        const subcommand = interaction.options.getSubcommand(false);
+
+        if (group === 'repo') {
+            if (subcommand === 'watch') return watch.execute(interaction);
+            if (subcommand === 'unwatch') return unwatch.execute(interaction);
+            if (subcommand === 'check-webhook' || subcommand === 'check') return checkWebhook.execute(interaction);
+        } else if (group === 'issues') {
+            if (subcommand === 'list') return list.execute(interaction);
+        }
+
+        await interaction.reply({
+            content:
+                '⚠️ This command is only supported in GitHub App mode. Please upgrade your deployment to use GitHub App.',
+            ephemeral: true,
+        });
     },
 };
 

@@ -416,7 +416,7 @@ describe('Commands - Global /gh Surface & /github Deprecated Alias', () => {
             expect(callArg.content).toContain('octo-org/unwatched-repo');
         });
 
-        it('should append deprecation notice to /github deprecated command responses', async () => {
+        it('should append deprecation notice to /github deprecated command responses in github_app mode', async () => {
             const mockInteraction = createMockInteraction({
                 commandName: 'github',
                 user: { id: 'member-1' },
@@ -433,6 +433,42 @@ describe('Commands - Global /gh Surface & /github Deprecated Alias', () => {
             const callArg = mockInteraction.reply.mock.calls[0][0];
             const embedJson = callArg.embeds[0].toJSON ? callArg.embeds[0].toJSON() : callArg.embeds[0];
             expect(embedJson.footer?.text).toContain(DEPRECATION_NOTICE);
+        });
+
+        it('should dispatch to legacy handler when /github is executed in legacy_pat mode', async () => {
+            const origEnv = { ...process.env };
+            try {
+                process.env.NODE_ENV = 'development';
+                process.env.DISCORD_TOKEN = 'test-token';
+                process.env.DISCORD_CLIENT_ID = '123456789012345678';
+                process.env.DISCORD_GUILD_ID = '987654321098765432';
+                process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
+                process.env.GITHUB_TOKEN = 'ghp_legacy_test_token';
+                process.env.GITHUB_OWNER = 'octo-org';
+                process.env.GITHUB_WEBHOOK_SECRET = 'secret';
+                delete process.env.GITHUB_APP_ID;
+                delete process.env.GITHUB_APP_PRIVATE_KEY;
+                delete process.env.GITHUB_CLIENT_ID;
+                delete process.env.GITHUB_CLIENT_SECRET;
+
+                const mockInteraction = createMockInteraction({
+                    commandName: 'github',
+                    user: { id: 'member-1' },
+                    options: {
+                        getSubcommandGroup: () => 'repo',
+                        getSubcommand: () => 'unsupported_test',
+                    },
+                    memberPermissions: new PermissionsBitField(0n),
+                });
+
+                await github.execute(mockInteraction as any);
+
+                expect(mockInteraction.reply).toHaveBeenCalledTimes(1);
+                const callArg = mockInteraction.reply.mock.calls[0][0];
+                expect(callArg.content).toContain('only supported in GitHub App mode');
+            } finally {
+                process.env = origEnv;
+            }
         });
     });
 });

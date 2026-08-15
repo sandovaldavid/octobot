@@ -545,9 +545,10 @@ async function handleIssuesList(
 
     const repoFullName = `${owner}/${repo}`;
 
-    // Restrict issue listing to repositories actively watched in this Discord guild
+    // Restrict issue listing to repositories actively watched in this Discord guild under this installation
     const subscription = await deps.subscriptionModel.findOne({
         guildId,
+        installationId: installation.installationId,
         repositoryFullName: repoFullName,
         active: true,
     });

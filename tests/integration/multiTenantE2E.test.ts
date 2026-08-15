@@ -869,5 +869,56 @@ describe('Integration - Multi-Tenant End-to-End Suite', () => {
         });
         await new Promise((r) => setTimeout(r, 50));
         expect(deliveredNotifications.length).toBe(0);
+
+        // --- 6. Runtime Composition: Reconcile selection change via HTTP endpoint without DI ---
+        const mockOctokit = {
+            rest: {
+                apps: {
+                    listReposAccessibleToInstallation: mock(async () => ({
+                        data: {
+                            total_count: 1,
+                            repositories: [{ id: 6001, full_name: 'org-b/repo-2' }],
+                        },
+                    })),
+                },
+            },
+        };
+
+        const mockClientResolver = {
+            forInstallation: mock(async () => mockOctokit as any),
+            invalidate: mock(() => {}),
+        };
+
+        // Wire up client resolver on EventProcessor (as index.ts does on bootstrap)
+        EventProcessor.setClientResolver(mockClientResolver);
+
+        // Add orphaned subscription for Guild B that is no longer accessible
+        memorySubscriptions.push({
+            _id: 'sub-b-orphaned',
+            installationId: 1002,
+            repositoryId: 9999,
+            repositoryFullName: 'org-b/inaccessible-repo',
+            guildId: 'guild-b',
+            channelId: 'channel-b',
+            active: true,
+            events: ['push'],
+        });
+
+        const reconcileRes = await sendSignedWebhook('installation_repositories', 'delivery-reconcile-http-1', {
+            action: 'removed',
+            installation: { id: 1002 },
+            repository_selection: 'selected',
+            repositories_removed: [],
+        });
+
+        expect(reconcileRes.status).toBe(200);
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(mockClientResolver.forInstallation).toHaveBeenCalledWith(1002);
+        const orphanedSub = memorySubscriptions.find((s) => s._id === 'sub-b-orphaned');
+        expect(orphanedSub.active).toBe(false);
+
+        // Reset resolver
+        EventProcessor.setClientResolver(null);
     });
 });

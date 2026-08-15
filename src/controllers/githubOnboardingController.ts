@@ -217,22 +217,40 @@ export function createOnboardingController(deps: GitHubOnboardingControllerDeps)
             }
 
             const accessToken = tokenData.access_token;
-            let installationsData: any;
+            let matchedInstallation: any = null;
+            let page = 1;
+            let hasMorePages = true;
 
             try {
-                const instResponse = await fetchFn('https://api.github.com/user/installations', {
-                    method: 'GET',
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                        Accept: 'application/vnd.github+json',
-                        'User-Agent': 'OctoBot',
-                    },
-                });
+                while (hasMorePages && !matchedInstallation) {
+                    const instResponse = await fetchFn(
+                        `https://api.github.com/user/installations?per_page=100&page=${page}`,
+                        {
+                            method: 'GET',
+                            headers: {
+                                Authorization: `Bearer ${accessToken}`,
+                                Accept: 'application/vnd.github+json',
+                                'User-Agent': 'OctoBot',
+                            },
+                        }
+                    );
 
-                if (!instResponse.ok) {
-                    throw new Error(`User installations check returned status ${instResponse.status}`);
+                    if (!instResponse.ok) {
+                        throw new Error(`User installations check returned status ${instResponse.status}`);
+                    }
+                    const installationsData: any = await instResponse.json();
+                    const accessibleInstallations: any[] = installationsData?.installations || [];
+                    matchedInstallation = accessibleInstallations.find(
+                        (inst: any) => inst.id === attempt.candidateInstallationId
+                    );
+
+                    const totalCount = installationsData?.total_count || accessibleInstallations.length;
+                    if (matchedInstallation || accessibleInstallations.length < 100 || page * 100 >= totalCount) {
+                        hasMorePages = false;
+                    } else {
+                        page++;
+                    }
                 }
-                installationsData = await instResponse.json();
             } catch {
                 await deps.attemptModel.updateOne(
                     { _id: attempt._id },
@@ -243,11 +261,6 @@ export function createOnboardingController(deps: GitHubOnboardingControllerDeps)
                 );
                 return;
             }
-
-            const accessibleInstallations: any[] = installationsData?.installations || [];
-            const matchedInstallation = accessibleInstallations.find(
-                (inst: any) => inst.id === attempt.candidateInstallationId
-            );
 
             if (!matchedInstallation) {
                 await deps.attemptModel.updateOne(

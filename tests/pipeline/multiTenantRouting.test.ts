@@ -594,6 +594,83 @@ describe('Pipeline - Multi-Tenant Routing & Fail-Closed Verification', () => {
             expect(mockSubModel.updateMany).toHaveBeenCalled();
         });
 
+        it('should paginate through all accessible repository pages during reconciliation', async () => {
+            const mockSubModel = {
+                updateMany: mock(async () => ({})),
+                find: mock(async () => [
+                    { _id: 'sub-p1', repositoryId: 100, active: true },
+                    { _id: 'sub-p2', repositoryId: 200, active: true },
+                    { _id: 'sub-orphaned', repositoryId: 999, active: true },
+                ]),
+            } as any;
+
+            const mockInstModel = {
+                findOneAndUpdate: mock(async () => ({})),
+            } as any;
+
+            const page1Repos = Array.from({ length: 100 }, (_, i) => ({
+                id: i + 1,
+                full_name: `acme/repo-${i + 1}`,
+            }));
+            const page2Repos = [{ id: 200, full_name: 'acme/repo-200' }];
+
+            const listReposMock = mock(async ({ page }: { page?: number }) => {
+                if (page === 2) {
+                    return {
+                        data: {
+                            total_count: 101,
+                            repositories: page2Repos,
+                        },
+                    };
+                }
+                return {
+                    data: {
+                        total_count: 101,
+                        repositories: page1Repos,
+                    },
+                };
+            });
+
+            const mockResolver: IGitHubClientResolver = {
+                forInstallation: mock(
+                    async () =>
+                        ({
+                            rest: {
+                                apps: {
+                                    listReposAccessibleToInstallation: listReposMock,
+                                },
+                            },
+                        }) as any
+                ),
+                invalidate: mock(() => {}),
+            };
+
+            const delivery: VerifiedGithubDelivery = {
+                deliveryId: 'del-inst-repos-multi-page-1',
+                eventName: 'installation_repositories',
+                receivedAt: new Date(),
+                payload: {
+                    action: 'removed',
+                    installation: { id: 5001 },
+                    repository_selection: 'selected',
+                    repositories_removed: [],
+                },
+            };
+
+            const result = await EventProcessor.process(delivery, {
+                subModel: mockSubModel,
+                installationModel: mockInstModel,
+                clientResolver: mockResolver,
+            });
+
+            expect(result.outcome).toBe('succeeded');
+            expect(listReposMock).toHaveBeenCalledTimes(2);
+            expect(mockSubModel.updateMany).toHaveBeenCalledWith(
+                { _id: { $in: ['sub-orphaned'] } },
+                { $set: { active: false } }
+            );
+        });
+
         it('should return invalid_payload if lifecycle event is missing installation id', async () => {
             const delivery: VerifiedGithubDelivery = {
                 deliveryId: 'del-inst-malformed-1',

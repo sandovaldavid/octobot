@@ -412,10 +412,29 @@ export class EventProcessor {
                         try {
                             const client = await clientResolver.forInstallation(installationId);
                             if (client && client.rest?.apps?.listReposAccessibleToInstallation) {
-                                const res = await client.rest.apps.listReposAccessibleToInstallation({
-                                    per_page: 100,
-                                });
-                                const accessibleRepoIds = new Set(res.data.repositories.map((r: any) => r.id));
+                                const accessibleRepoIds = new Set<number>();
+                                let page = 1;
+                                let hasMore = true;
+
+                                while (hasMore) {
+                                    const res = await client.rest.apps.listReposAccessibleToInstallation({
+                                        per_page: 100,
+                                        page,
+                                    });
+                                    const repos = res.data?.repositories || [];
+                                    for (const repo of repos) {
+                                        if (typeof repo.id === 'number') {
+                                            accessibleRepoIds.add(repo.id);
+                                        }
+                                    }
+                                    const totalCount = res.data?.total_count || repos.length;
+                                    if (repos.length < 100 || accessibleRepoIds.size >= totalCount) {
+                                        hasMore = false;
+                                    } else {
+                                        page++;
+                                    }
+                                }
+
                                 const activeSubs = await subModel.find({ installationId, active: true });
                                 const orphaned = activeSubs.filter(
                                     (s: any) => s.repositoryId && !accessibleRepoIds.has(s.repositoryId)

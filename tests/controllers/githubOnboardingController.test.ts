@@ -493,6 +493,79 @@ describe('Controller - GitHubOnboardingController', () => {
             expect(claimedAttempt.save).toHaveBeenCalledTimes(1);
         });
 
+        it('should paginate /user/installations and succeed when candidate installation is on page 2', async () => {
+            const claimedAttempt: any = {
+                _id: 'attempt-p2',
+                guildId: 'guild-p2',
+                initiatedByDiscordUserId: 'user-p2',
+                candidateInstallationId: 2002,
+                oauthCodeVerifier: 'test-verifier-p2',
+                status: 'verifying',
+                save: mock(async function (this: any) {
+                    return this;
+                }),
+            };
+            mockAttemptModel.findOneAndUpdate = mock(async () => claimedAttempt);
+
+            mockFetch = mock(async (url: string) => {
+                if (url.includes('/login/oauth/access_token')) {
+                    return new Response(JSON.stringify({ access_token: 'gho_p2_token', token_type: 'bearer' }), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' },
+                    });
+                }
+                if (url.includes('/user/installations')) {
+                    if (url.includes('&page=1')) {
+                        const page1Installations = Array.from({ length: 100 }, (_, i) => ({
+                            id: 1000 + i,
+                            account: { id: i + 1, login: `Org-${i + 1}`, type: 'Organization' },
+                        }));
+                        return new Response(
+                            JSON.stringify({
+                                total_count: 101,
+                                installations: page1Installations,
+                            }),
+                            { status: 200, headers: { 'Content-Type': 'application/json' } }
+                        );
+                    }
+                    if (url.includes('&page=2')) {
+                        return new Response(
+                            JSON.stringify({
+                                total_count: 101,
+                                installations: [
+                                    {
+                                        id: 2002,
+                                        account: { id: 999, login: 'Target-Org', type: 'Organization' },
+                                    },
+                                ],
+                            }),
+                            { status: 200, headers: { 'Content-Type': 'application/json' } }
+                        );
+                    }
+                }
+                return new Response('Not found', { status: 404 });
+            });
+
+            const controller = createOnboardingController({
+                appConfig,
+                attemptModel: mockAttemptModel,
+                installationModel: mockInstallationModel,
+                connectionModel: mockConnectionModel,
+                fetchFn: mockFetch,
+            });
+
+            const { req, res } = createMockReqRes({ code: 'valid-code-p2', state: 'valid-state-p2' });
+            await controller.handleCallback(req, res);
+
+            expect(res.statusCode).toBe(200);
+            expect(res.body).toContain('OctoBot Connected!');
+            expect(mockConnectionModel.findOneAndUpdate).toHaveBeenCalledWith(
+                { guildId: 'guild-p2', installationId: 2002 },
+                expect.anything(),
+                expect.anything()
+            );
+        });
+
         it('should return 403 and mark attempt failed if /user/installations API call throws an error', async () => {
             const claimedAttempt: any = {
                 _id: 'attempt-1',

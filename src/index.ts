@@ -11,6 +11,8 @@ import { debug, logger } from '@utils/logger';
 import { githubClient } from '@config/githubConfig';
 import { commandRegistry } from '@commands/index';
 import { registerApplicationCommands } from '@services/discord/commandRegistrationService';
+import { getGitHubClientResolver } from '@services/github/githubClientResolver';
+import { EventProcessor } from '@/pipeline/processor';
 import { createApp } from '@/app';
 
 // 1. Canonical Configuration Bootstrap Gate
@@ -76,7 +78,7 @@ const initializeServices = async () => {
         // 4. Register slash commands (global in GitHub App mode / production, guild-specific in legacy PAT dev)
         const commands = Array.from(commandRegistry.getCommands().values()).map((cmd) => cmd.data.toJSON());
         const rest = new REST({ version: '10' }).setToken(env.DISCORD_TOKEN);
-        const isGlobal = env.authMode === 'github_app' || !env.DISCORD_GUILD_ID || env.NODE_ENV === 'production';
+        const isGlobal = env.authMode === 'github_app';
 
         await registerApplicationCommands({
             rest,
@@ -86,7 +88,7 @@ const initializeServices = async () => {
             commands,
         });
 
-        // 5. Test GitHub connection (if legacy PAT is configured)
+        // 5. Test GitHub connection & wire resolvers
         let webhookConnected = false;
         if (env.authMode === 'legacy_pat' || env.GITHUB_TOKEN) {
             webhookConnected = await githubClient.testWebhookConnection();
@@ -95,6 +97,7 @@ const initializeServices = async () => {
             }
         } else {
             webhookConnected = true;
+            EventProcessor.setClientResolver(getGitHubClientResolver());
         }
 
         // 6. Start HTTP server
