@@ -458,7 +458,10 @@ describe('Pipeline - Multi-Tenant Routing & Fail-Closed Verification', () => {
             const mockSubModel = {
                 updateMany: mock(async (query: any, update: any) => {
                     expect(query.installationId).toBe(5001);
-                    expect(query.repositoryId.$in).toEqual([101, 102]);
+                    expect(query.$or).toEqual([
+                        { repositoryId: { $in: [101, 102] } },
+                        { repositoryFullName: { $in: ['acme/repo1', 'acme/repo2'] } },
+                    ]);
                     expect(update.$set.active).toBe(false);
                     return {};
                 }),
@@ -484,6 +487,51 @@ describe('Pipeline - Multi-Tenant Routing & Fail-Closed Verification', () => {
                         { id: 101, full_name: 'acme/repo1' },
                         { id: 102, full_name: 'acme/repo2' },
                     ],
+                },
+            };
+
+            const result = await EventProcessor.process(delivery, {
+                subModel: mockSubModel,
+                installationModel: mockInstModel,
+                clientResolver: null as any,
+            });
+
+            expect(result.outcome).toBe('succeeded');
+            expect(mockSubModel.updateMany).toHaveBeenCalledTimes(1);
+            expect(mockInstModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
+        });
+
+        it('should handle installation_repositories with action: added containing both repositories_added and repositories_removed', async () => {
+            const mockSubModel = {
+                updateMany: mock(async (query: any, update: any) => {
+                    expect(query.installationId).toBe(5001);
+                    expect(query.$or).toEqual([
+                        { repositoryId: { $in: [100] } },
+                        { repositoryFullName: { $in: ['sandovaldavid/octobot'] } },
+                    ]);
+                    expect(update.$set.active).toBe(false);
+                    return {};
+                }),
+            } as any;
+
+            const mockInstModel = {
+                findOneAndUpdate: mock(async (query: any, update: any) => {
+                    expect(query.installationId).toBe(5001);
+                    expect(update.$set.repositorySelection).toBe('selected');
+                    return {};
+                }),
+            } as any;
+
+            const delivery: VerifiedGithubDelivery = {
+                deliveryId: 'del-inst-repos-added-with-removed-1',
+                eventName: 'installation_repositories',
+                receivedAt: new Date(),
+                payload: {
+                    action: 'added',
+                    installation: { id: 5001 },
+                    repository_selection: 'selected',
+                    repositories_added: [{ id: 200, full_name: 'sandovaldavid/dotfiles' }],
+                    repositories_removed: [{ id: 100, full_name: 'sandovaldavid/octobot' }],
                 },
             };
 

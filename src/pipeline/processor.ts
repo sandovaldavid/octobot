@@ -380,101 +380,99 @@ export class EventProcessor {
         if (eventName === 'installation_repositories') {
             const repositorySelection = p.repository_selection || p.installation?.repository_selection || 'selected';
 
-            switch (action) {
-                case 'added': {
-                    await instModel.findOneAndUpdate({ installationId }, { $set: { repositorySelection } });
-                    break;
+            const repositoriesRemoved = Array.isArray(p.repositories_removed) ? p.repositories_removed : [];
+            const removedRepoIds = repositoriesRemoved
+                .map((r: any) => (typeof r.id === 'number' ? r.id : Number(r.id)))
+                .filter((id: number) => !isNaN(id) && id > 0);
+            const removedRepoNames = repositoriesRemoved
+                .map((r: any) => (r.full_name || r.name)?.toLowerCase()?.trim())
+                .filter(Boolean);
+
+            if (removedRepoIds.length > 0 || removedRepoNames.length > 0) {
+                const filterConditions: any[] = [];
+                if (removedRepoIds.length > 0) {
+                    filterConditions.push({ repositoryId: { $in: removedRepoIds } });
                 }
+                if (removedRepoNames.length > 0) {
+                    filterConditions.push({ repositoryFullName: { $in: removedRepoNames } });
+                }
+                await subModel.updateMany(
+                    {
+                        installationId,
+                        $or: filterConditions,
+                    },
+                    { $set: { active: false } }
+                );
+            }
 
-                case 'removed': {
-                    const repositoriesRemoved = Array.isArray(p.repositories_removed) ? p.repositories_removed : [];
-                    const removedRepoIds = repositoriesRemoved
-                        .map((r: any) => (typeof r.id === 'number' ? r.id : Number(r.id)))
-                        .filter((id: number) => !isNaN(id) && id > 0);
+            await instModel.findOneAndUpdate({ installationId }, { $set: { repositorySelection } });
 
-                    if (removedRepoIds.length > 0) {
-                        await subModel.updateMany(
-                            {
-                                installationId,
-                                repositoryId: { $in: removedRepoIds },
-                            },
-                            { $set: { active: false } }
-                        );
-                    }
+            // Reconcile when repository selection is 'selected' and clientResolver is available
+            if (clientResolver && (repositorySelection === 'selected' || p.repository_selection === 'selected')) {
+                try {
+                    const client = await clientResolver.forInstallation(installationId);
+                    if (client && client.rest?.apps?.listReposAccessibleToInstallation) {
+                        const accessibleRepoIds = new Set<number>();
+                        const accessibleRepoNames = new Set<string>();
+                        let page = 1;
+                        let hasMore = true;
 
-                    await instModel.findOneAndUpdate({ installationId }, { $set: { repositorySelection } });
-
-                    // Reconcile when repository selection is 'selected' and clientResolver is available
-                    if (
-                        clientResolver &&
-                        (repositorySelection === 'selected' || p.repository_selection === 'selected')
-                    ) {
-                        try {
-                            const client = await clientResolver.forInstallation(installationId);
-                            if (client && client.rest?.apps?.listReposAccessibleToInstallation) {
-                                const accessibleRepoIds = new Set<number>();
-                                let page = 1;
-                                let hasMore = true;
-
-                                while (hasMore) {
-                                    const res = await client.rest.apps.listReposAccessibleToInstallation({
-                                        per_page: 100,
-                                        page,
-                                    });
-                                    const repos = res.data?.repositories || [];
-                                    for (const repo of repos) {
-                                        if (typeof repo.id === 'number') {
-                                            accessibleRepoIds.add(repo.id);
-                                        }
-                                    }
-                                    const totalCount = res.data?.total_count || repos.length;
-                                    if (repos.length < 100 || accessibleRepoIds.size >= totalCount) {
-                                        hasMore = false;
-                                    } else {
-                                        page++;
-                                    }
+                        while (hasMore) {
+                            const res = await client.rest.apps.listReposAccessibleToInstallation({
+                                per_page: 100,
+                                page,
+                            });
+                            const repos = res.data?.repositories || [];
+                            for (const repo of repos) {
+                                if (typeof repo.id === 'number') {
+                                    accessibleRepoIds.add(repo.id);
                                 }
-
-                                const activeSubs = await subModel.find({ installationId, active: true });
-                                const orphaned = activeSubs.filter(
-                                    (s: any) => s.repositoryId && !accessibleRepoIds.has(s.repositoryId)
-                                );
-                                if (orphaned.length > 0) {
-                                    await subModel.updateMany(
-                                        { _id: { $in: orphaned.map((s: any) => s._id) } },
-                                        { $set: { active: false } }
-                                    );
+                                if (repo.full_name) {
+                                    accessibleRepoNames.add(repo.full_name.toLowerCase());
                                 }
                             }
-                        } catch (error) {
-                            debug.error(
-                                `Failed to reconcile accessible repositories for installation ${installationId}:`,
-                                error
+                            const totalCount = res.data?.total_count || repos.length;
+                            if (repos.length < 100 || accessibleRepoIds.size >= totalCount) {
+                                hasMore = false;
+                            } else {
+                                page++;
+                            }
+                        }
+
+                        const activeSubs = await subModel.find({ installationId, active: true });
+                        const orphaned = activeSubs.filter((s: any) => {
+                            if (s.repositoryId && accessibleRepoIds.has(s.repositoryId)) return false;
+                            if (s.repositoryFullName && accessibleRepoNames.has(s.repositoryFullName.toLowerCase()))
+                                return false;
+                            return true;
+                        });
+                        if (orphaned.length > 0) {
+                            await subModel.updateMany(
+                                { _id: { $in: orphaned.map((s: any) => s._id) } },
+                                { $set: { active: false } }
                             );
-                            const errorMsg = error instanceof Error ? error.message : 'Reconciliation failed';
-                            const result: ProcessingResult = {
-                                deliveryId,
-                                eventName,
-                                outcome: 'failed',
-                                matchedSubscriptions: 0,
-                                attempted: 0,
-                                succeeded: 0,
-                                failed: 1,
-                                durationMs: Date.now() - startTime,
-                                error: `Reconciliation failed: ${errorMsg}`,
-                            };
-                            this.logOutcome(result);
-                            return result;
                         }
                     }
-                    break;
-                }
-
-                default:
-                    debug.info(
-                        `Unhandled installation_repositories action "${action}" for installation ${installationId}`
+                } catch (error) {
+                    debug.error(
+                        `Failed to reconcile accessible repositories for installation ${installationId}:`,
+                        error
                     );
-                    break;
+                    const errorMsg = error instanceof Error ? error.message : 'Reconciliation failed';
+                    const result: ProcessingResult = {
+                        deliveryId,
+                        eventName,
+                        outcome: 'failed',
+                        matchedSubscriptions: 0,
+                        attempted: 0,
+                        succeeded: 0,
+                        failed: 1,
+                        durationMs: Date.now() - startTime,
+                        error: `Reconciliation failed: ${errorMsg}`,
+                    };
+                    this.logOutcome(result);
+                    return result;
+                }
             }
 
             const result: ProcessingResult = {
