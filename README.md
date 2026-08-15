@@ -233,21 +233,35 @@ bun run format       # Autoformateo de código
 
 ---
 
-## 🧪 Pruebas Automatizadas
+## 🧪 Pruebas Automatizadas y CI
+
+La calidad del código y la confiabilidad del pipeline se validan de forma continua mediante GitHub Actions (`CI / validate`):
 
 ```bash
-bun test
+bun run typecheck    # Verificación estática TypeScript (tsc --noEmit)
+bun run lint         # Análisis estático de código (ESLint 9)
+bun run format:check # Comprobación de formato (Prettier)
+bun test             # Suite completa de pruebas unitarias e integración
 ```
 
-Suites de pruebas:
+Suites de pruebas automatizadas:
 
 - `tests/config/envConfig.test.ts` (validación de variables de entorno)
+- `tests/controllers/webhookController.test.ts` (ingress de webhooks e idempotencia)
+- `tests/integration/webhookE2E.test.ts` (suite E2E HTTP del pipeline y fan-out)
 - `tests/middlewares/verifyGithubWebhook.test.ts` (verificación de firma HMAC)
 - `tests/models/subscription.test.ts` (esquema e invariantes de suscripciones)
+- `tests/models/webhookDelivery.test.ts` (esquema e índices TTL de deduplicación)
+- `tests/models/workflowAlertState.test.ts` (modelo de estado y transición de CI)
+- `tests/pipeline/normalizer.test.ts` (normalización tipada de eventos GitHub)
+- `tests/pipeline/policy.test.ts` (política de reducción de ruido)
+- `tests/pipeline/processor.test.ts` (orquestación del pipeline y control flow)
 - `tests/security/publicApiSurface.test.ts` (verificación de superficie HTTP e inmunidad de rutas 404)
+- `tests/services/deliveryIdempotencyService.test.ts` (reclamo atómico y leases de entrega)
 - `tests/services/discordService.test.ts` (formateo y color de notificaciones)
 - `tests/services/repositoryService.test.ts` (mapeo de datos de GitHub)
 - `tests/services/webhookService.test.ts` (construcción de webhooks)
+- `tests/services/workflowStateService.test.ts` (alertas de fallo y recuperación de CI)
 - `tests/utils/validators.test.ts` (validadores de snowflakes, URLs y nombres)
 
 ---
