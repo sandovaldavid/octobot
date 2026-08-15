@@ -360,7 +360,7 @@ export const issueService = {
             }
 
             for (const chunk of chunks) {
-                const repoResults = await Promise.all(
+                await Promise.all(
                     chunk.map(async (repo) => {
                         try {
                             const [openIssues, closedIssues] = await Promise.all([
