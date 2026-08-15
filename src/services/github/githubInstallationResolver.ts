@@ -1,11 +1,11 @@
-import { DiscordGuildConnectionModel } from '../../models/discordGuildConnection';
-import { GitHubInstallationModel, IGitHubInstallation } from '../../models/githubInstallation';
-import { GitHubInstallationContext } from '../../types/githubApp';
+import { DiscordGuildConnectionModel } from '@models/discordGuildConnection';
+import { GitHubInstallationModel, IGitHubInstallation } from '@models/githubInstallation';
+import { GitHubInstallationContext } from '@/types/githubApp';
 import {
     GuildNotConnectedError,
     InstallationRevokedError,
     InstallationSuspendedError,
-} from '../../types/multiTenantErrors';
+} from '@/types/multiTenantErrors';
 
 export interface IGitHubInstallationResolver {
     resolveForGuild(guildId: string, repositoryFullName?: string): Promise<GitHubInstallationContext>;

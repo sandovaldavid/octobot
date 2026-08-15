@@ -1,9 +1,9 @@
 import { Router, type Request, type Response } from 'express';
-import { getGitHubAppConfig } from '../config/githubAppConfig';
-import { createOnboardingController, type GitHubOnboardingController } from '../controllers/githubOnboardingController';
-import { DiscordGuildConnectionModel } from '../models/discordGuildConnection';
-import { GitHubConnectionAttemptModel } from '../models/githubConnectionAttempt';
-import { GitHubInstallationModel } from '../models/githubInstallation';
+import { getGitHubAppConfig } from '@config/githubAppConfig';
+import { createOnboardingController, type GitHubOnboardingController } from '@controllers/githubOnboardingController';
+import { DiscordGuildConnectionModel } from '@models/discordGuildConnection';
+import { GitHubConnectionAttemptModel } from '@models/githubConnectionAttempt';
+import { GitHubInstallationModel } from '@models/githubInstallation';
 
 export function createGitHubOnboardingRouter(controller?: GitHubOnboardingController): Router {
     const router = Router();

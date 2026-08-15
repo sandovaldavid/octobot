@@ -1,9 +1,9 @@
 import crypto from 'crypto';
 import type { Request, Response } from 'express';
-import type { GitHubAppConfig } from '../config/githubAppConfig';
-import type { DiscordGuildConnectionModel } from '../models/discordGuildConnection';
-import type { GitHubConnectionAttemptModel } from '../models/githubConnectionAttempt';
-import type { GitHubInstallationModel } from '../models/githubInstallation';
+import type { GitHubAppConfig } from '@config/githubAppConfig';
+import type { DiscordGuildConnectionModel } from '@models/discordGuildConnection';
+import type { GitHubConnectionAttemptModel } from '@models/githubConnectionAttempt';
+import type { GitHubInstallationModel } from '@models/githubInstallation';
 
 export interface GitHubOnboardingControllerDeps {
     appConfig: GitHubAppConfig;
