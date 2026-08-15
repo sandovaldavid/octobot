@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, Events } from 'discord.js';
 import { debug } from '@utils/logger';
 
 interface DiscordConfig {
@@ -28,7 +28,7 @@ class DiscordClient {
     }
 
     private initializeClient() {
-        this.client.once('ready', () => {
+        this.client.once(Events.ClientReady, () => {
             debug.info(`Discord Bot logged in as ${this.client.user?.tag}`);
         });
 

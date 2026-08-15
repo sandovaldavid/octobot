@@ -3,7 +3,7 @@ dotenv.config();
 
 import { Server } from 'http';
 import mongoose from 'mongoose';
-import { REST } from 'discord.js';
+import { REST, Events } from 'discord.js';
 import { validateEnv } from '@config/envConfig';
 import { connectDB } from '@config/databaseConfig';
 import { discordClient } from '@config/discordConfig';
@@ -123,7 +123,7 @@ const initializeServices = async () => {
 };
 
 // Register Discord event handlers
-client.once('ready', () => {
+client.once(Events.ClientReady, () => {
     debug.info(`Bot is ready as ${client.user?.tag}`);
 });
 
