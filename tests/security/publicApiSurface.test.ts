@@ -87,6 +87,7 @@ describe('Public API security surface', () => {
             headers: {
                 'content-type': 'application/json',
                 'x-github-event': 'push',
+                'x-github-delivery': 'sec-test-delivery-1',
             },
             body: JSON.stringify({ repository: { name: 'octobot', full_name: 'sandovaldavid/octobot' } }),
         });

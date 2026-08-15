@@ -4,6 +4,7 @@ import { debug } from '@utils/logger';
 
 export function verifyGithubWebhook(req: Request, res: Response, next: NextFunction): void {
     const event = req.headers['x-github-event'] as string;
+    const deliveryId = req.headers['x-github-delivery'] as string;
     const signature = req.headers['x-hub-signature-256'] as string;
     const secret = process.env.GITHUB_WEBHOOK_SECRET;
 
@@ -14,26 +15,30 @@ export function verifyGithubWebhook(req: Request, res: Response, next: NextFunct
     }
 
     if (!event) {
-        res.status(400).json({ success: false, error: 'No GitHub event specified' });
+        res.status(400).json({ success: false, error: 'Missing x-github-event header' });
         return;
     }
 
-    // Skip signature verification for ping events during webhook setup
-    if (event === 'ping') {
-        res.status(200).json({ success: true, message: 'Webhook ping received' });
+    if (!deliveryId) {
+        res.status(400).json({ success: false, error: 'Missing x-github-delivery header' });
+        return;
+    }
+
+    const rawPayload: Buffer | undefined = (req as any).rawBody;
+    if (!rawPayload || !Buffer.isBuffer(rawPayload)) {
+        debug.warn('Rejected webhook request: Missing raw request body for verification');
+        res.status(400).json({ success: false, error: 'Missing raw request body for verification' });
         return;
     }
 
     if (!signature) {
-        debug.warn('Rejected webhook request: Missing x-hub-signature-256 header');
+        debug.warn(`Rejected webhook request ${deliveryId}: Missing x-hub-signature-256 header`);
         res.status(401).json({ success: false, error: 'Missing signature header' });
         return;
     }
 
     try {
-        const rawPayload = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
         const signatureValue = signature.replace('sha256=', '');
-
         const hmac = crypto.createHmac('sha256', secret);
         hmac.update(rawPayload);
         const calculatedSignature = hmac.digest('hex');
@@ -44,15 +49,12 @@ export function verifyGithubWebhook(req: Request, res: Response, next: NextFunct
         const isValid = sigBuf.length === calcBuf.length && crypto.timingSafeEqual(sigBuf, calcBuf);
 
         if (!isValid) {
-            debug.error('Invalid GitHub webhook signature', {
-                expected: calculatedSignature,
-                received: signatureValue,
-            });
+            debug.warn(`Invalid GitHub webhook signature for delivery ${deliveryId}`);
             res.status(401).json({ success: false, error: 'Invalid webhook signature' });
             return;
         }
 
-        debug.info('GitHub webhook signature verified successfully');
+        debug.info(`GitHub webhook signature verified for delivery ${deliveryId} (event: ${event})`);
         next();
     } catch (error) {
         debug.error('Error verifying webhook signature:', error);
