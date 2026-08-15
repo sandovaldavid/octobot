@@ -36,9 +36,11 @@ class DiscordClient {
             debug.error('Discord Client Error:', error);
         });
 
-        this.client.login(this.config.token).catch((error) => {
-            debug.error('Discord Login Error:', error);
-        });
+        if (this.config.token) {
+            this.client.login(this.config.token).catch((error) => {
+                debug.error('Discord Login Error:', error);
+            });
+        }
     }
 
     public static getInstance(config?: DiscordConfig): DiscordClient {

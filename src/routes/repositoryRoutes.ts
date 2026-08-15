@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { repositoryController } from '@controllers/repositoyController';
+import { repositoryController } from '@controllers/repositoryController';
 
 const router = Router();
 

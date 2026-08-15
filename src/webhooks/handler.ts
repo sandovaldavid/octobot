@@ -54,19 +54,20 @@ export const handleGithubWebhook = async (event: string, payload: Payload) => {
 };
 
 async function handlePushEvent(channelId: string, payload: Payload) {
+    const commits = payload.commits || [];
     const notification = discordService.createGithubNotification({
         type: 'commit',
         action: 'pushed',
         title: `New Commits to ${payload.repository.full_name}`,
-        description: `${payload.commits.length} new commits pushed to ${payload.ref}`,
+        description: `${commits.length} new commit${commits.length === 1 ? '' : 's'} pushed to ${payload.ref}`,
         url: payload.compare,
         author: {
-            name: payload.pusher.name,
-            avatar: payload.sender.avatar_url,
+            name: payload.pusher?.name || payload.sender?.avatar_url || 'GitHub',
+            avatar: payload.sender?.avatar_url,
         },
-        fields: payload.commits.map((commit: Commit) => ({
-            name: commit.id.substring(0, 7),
-            value: commit.message,
+        fields: commits.slice(0, 10).map((commit: Commit) => ({
+            name: commit.id ? commit.id.substring(0, 7) : 'Commit',
+            value: commit.message || 'No message',
         })),
         color: DiscordColors.SUCCESS,
     });
