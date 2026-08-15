@@ -7,6 +7,7 @@ export interface VerifiedGithubDelivery {
 
 export type ProcessingOutcome =
     | 'delivered'
+    | 'succeeded'
     | 'ignored_ping'
     | 'ignored_unsupported_event'
     | 'ignored_no_subscription'
@@ -50,7 +51,13 @@ export type IssueAction = 'opened' | 'closed' | 'reopened' | 'labeled' | 'unlabe
 
 export type ReleaseAction = 'published' | 'created' | 'edited' | 'deleted' | 'prereleased';
 
-export interface NormalizedPushEvent {
+export interface BaseNormalizedEvent {
+    repositoryFullName?: string;
+    repositoryId?: number;
+    installationId?: number;
+}
+
+export interface NormalizedPushEvent extends BaseNormalizedEvent {
     type: 'push';
     repositoryFullName: string;
     ref: string;
@@ -64,7 +71,7 @@ export interface NormalizedPushEvent {
     }>;
 }
 
-export interface NormalizedPullRequestEvent {
+export interface NormalizedPullRequestEvent extends BaseNormalizedEvent {
     type: 'pull_request';
     repositoryFullName: string;
     action: PullRequestAction;
@@ -85,7 +92,7 @@ export interface NormalizedPullRequestEvent {
     mergedBy?: string;
 }
 
-export interface NormalizedPullRequestReviewEvent {
+export interface NormalizedPullRequestReviewEvent extends BaseNormalizedEvent {
     type: 'pull_request_review';
     repositoryFullName: string;
     action: PullRequestReviewAction;
@@ -102,7 +109,7 @@ export interface NormalizedPullRequestReviewEvent {
     submittedAt?: string;
 }
 
-export interface NormalizedWorkflowRunEvent {
+export interface NormalizedWorkflowRunEvent extends BaseNormalizedEvent {
     type: 'workflow_run';
     repositoryFullName: string;
     action: WorkflowRunAction;
@@ -121,7 +128,7 @@ export interface NormalizedWorkflowRunEvent {
     previousState?: 'healthy' | 'failing';
 }
 
-export interface NormalizedIssueEvent {
+export interface NormalizedIssueEvent extends BaseNormalizedEvent {
     type: 'issues';
     repositoryFullName: string;
     action: IssueAction;
@@ -136,7 +143,7 @@ export interface NormalizedIssueEvent {
     assigneeLogin?: string;
 }
 
-export interface NormalizedReleaseEvent {
+export interface NormalizedReleaseEvent extends BaseNormalizedEvent {
     type: 'release';
     repositoryFullName: string;
     action: ReleaseAction;
@@ -149,7 +156,7 @@ export interface NormalizedReleaseEvent {
     publishedAt: string;
 }
 
-export interface NormalizedBranchCreatedEvent {
+export interface NormalizedBranchCreatedEvent extends BaseNormalizedEvent {
     type: 'create';
     repositoryFullName: string;
     ref: string;
@@ -159,7 +166,7 @@ export interface NormalizedBranchCreatedEvent {
     htmlUrl: string;
 }
 
-export interface NormalizedBranchDeletedEvent {
+export interface NormalizedBranchDeletedEvent extends BaseNormalizedEvent {
     type: 'delete';
     repositoryFullName: string;
     ref: string;
@@ -169,14 +176,14 @@ export interface NormalizedBranchDeletedEvent {
     htmlUrl: string;
 }
 
-export interface NormalizedPingEvent {
+export interface NormalizedPingEvent extends BaseNormalizedEvent {
     type: 'ping';
     zen?: string;
     hookId?: number;
     repositoryFullName?: string;
 }
 
-export interface NormalizedUnsupportedEvent {
+export interface NormalizedUnsupportedEvent extends BaseNormalizedEvent {
     type: 'unsupported';
     rawEvent: string;
     repositoryFullName?: string;

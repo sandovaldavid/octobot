@@ -57,6 +57,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
     }
 
     const p = payload as Record<string, any>;
+    const installationId = typeof p.installation?.id === 'number' ? p.installation.id : undefined;
+    const repositoryId = typeof p.repository?.id === 'number' ? p.repository.id : undefined;
 
     if (eventName === 'ping') {
         const repoFullName =
@@ -69,6 +71,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 zen: typeof p.zen === 'string' ? p.zen : undefined,
                 hookId: typeof p.hook_id === 'number' ? p.hook_id : undefined,
                 repositoryFullName: repoFullName,
+                repositoryId,
+                installationId,
             } as NormalizedPingEvent,
         };
     }
@@ -107,6 +111,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 event: {
                     type: 'push',
                     repositoryFullName: repoFullName,
+                    repositoryId,
+                    installationId,
                     ref: p.ref,
                     compareUrl: String(p.compare || p.repository?.html_url || ''),
                     pusherName: String(p.pusher?.name || p.sender?.login || 'GitHub'),
@@ -186,6 +192,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 event: {
                     type: 'pull_request',
                     repositoryFullName: repoFullName,
+                    repositoryId,
+                    installationId,
                     action,
                     prNumber,
                     title,
@@ -259,6 +267,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 event: {
                     type: 'pull_request_review',
                     repositoryFullName: repoFullName,
+                    repositoryId,
+                    installationId,
                     action: rawAction as PullRequestReviewAction,
                     reviewState: rawState as ReviewState,
                     prNumber,
@@ -327,6 +337,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 event: {
                     type: 'workflow_run',
                     repositoryFullName: repoFullName,
+                    repositoryId,
+                    installationId,
                     action: rawAction as WorkflowRunAction,
                     workflowId,
                     workflowName,
@@ -391,6 +403,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 event: {
                     type: 'issues',
                     repositoryFullName: repoFullName,
+                    repositoryId,
+                    installationId,
                     action: rawAction as IssueAction,
                     issueNumber,
                     title,
@@ -434,6 +448,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 event: {
                     type: 'release',
                     repositoryFullName: repoFullName,
+                    repositoryId,
+                    installationId,
                     action,
                     tagName,
                     name: String(release.name || tagName),
@@ -463,6 +479,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 event: {
                     type: 'create',
                     repositoryFullName: repoFullName,
+                    repositoryId,
+                    installationId,
                     ref,
                     refType,
                     senderLogin: String(p.sender?.login || 'ghost'),
@@ -489,6 +507,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                 event: {
                     type: 'delete',
                     repositoryFullName: repoFullName,
+                    repositoryId,
+                    installationId,
                     ref,
                     refType,
                     senderLogin: String(p.sender?.login || 'ghost'),
@@ -505,6 +525,8 @@ export function normalizeGithubEvent(delivery: VerifiedGithubDelivery): Normaliz
                     type: 'unsupported',
                     rawEvent: eventName,
                     repositoryFullName: repoFullName,
+                    repositoryId,
+                    installationId,
                 } as NormalizedUnsupportedEvent,
             };
     }
