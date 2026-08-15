@@ -3,13 +3,16 @@ dotenv.config();
 
 import { Server } from 'http';
 import mongoose from 'mongoose';
-import { REST, Routes } from 'discord.js';
+import { REST, Events } from 'discord.js';
 import { validateEnv } from '@config/envConfig';
 import { connectDB } from '@config/databaseConfig';
 import { discordClient } from '@config/discordConfig';
 import { debug, logger } from '@utils/logger';
 import { githubClient } from '@config/githubConfig';
 import { commandRegistry } from '@commands/index';
+import { registerApplicationCommands } from '@services/discord/commandRegistrationService';
+import { getGitHubClientResolver } from '@services/github/githubClientResolver';
+import { EventProcessor } from '@/pipeline/processor';
 import { createApp } from '@/app';
 
 // 1. Canonical Configuration Bootstrap Gate
@@ -72,19 +75,29 @@ const initializeServices = async () => {
             throw new Error('Failed to connect to Discord');
         }
 
-        // 4. Register slash commands
+        // 4. Register slash commands (global in GitHub App mode / production, guild-specific in legacy PAT dev)
         const commands = Array.from(commandRegistry.getCommands().values()).map((cmd) => cmd.data.toJSON());
         const rest = new REST({ version: '10' }).setToken(env.DISCORD_TOKEN);
+        const isGlobal = env.authMode === 'github_app';
 
-        await rest.put(Routes.applicationGuildCommands(env.DISCORD_CLIENT_ID, env.DISCORD_GUILD_ID), {
-            body: commands,
+        await registerApplicationCommands({
+            rest,
+            clientId: env.DISCORD_CLIENT_ID,
+            guildId: env.DISCORD_GUILD_ID,
+            isGlobal,
+            commands,
         });
-        debug.info('Slash commands registered successfully');
 
-        // 5. Test GitHub connection
-        const webhookConnected = await githubClient.testWebhookConnection();
-        if (!webhookConnected) {
-            logger.warn('GitHub API verification had warnings — verify token permissions');
+        // 5. Test GitHub connection & wire resolvers
+        let webhookConnected = false;
+        if (env.authMode === 'legacy_pat' || env.GITHUB_TOKEN) {
+            webhookConnected = await githubClient.testWebhookConnection();
+            if (!webhookConnected) {
+                logger.warn('GitHub API verification had warnings — verify token permissions');
+            }
+        } else {
+            webhookConnected = true;
+            EventProcessor.setClientResolver(getGitHubClientResolver());
         }
 
         // 6. Start HTTP server
@@ -110,7 +123,7 @@ const initializeServices = async () => {
 };
 
 // Register Discord event handlers
-client.once('ready', () => {
+client.once(Events.ClientReady, () => {
     debug.info(`Bot is ready as ${client.user?.tag}`);
 });
 

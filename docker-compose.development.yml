@@ -1,4 +1,21 @@
 services:
+    octobot:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: octobot-app
+        restart: unless-stopped
+        ports:
+            - '${PORT:-4000}:4000'
+        env_file:
+            - .env
+        environment:
+            - MONGODB_URI=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-secretpassword}@mongodb:27017/${MONGO_DATABASE:-db-octobot}?authSource=admin
+        depends_on:
+            - mongodb
+        networks:
+            - octobot-network
+
     mongodb:
         image: mongo:latest
         container_name: octobot-mongodb

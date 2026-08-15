@@ -1,10 +1,10 @@
-import { ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
+import { ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { RepositorySubscriptionModel } from '@models/subscription';
 import { webhookService } from '@services/github/webhookService';
 import { githubClient } from '@config/githubConfig';
 import { debug } from '@utils/logger';
 import { createCommand } from '@utils/commandBuilder';
-import { DEFAULT_SUBSCRIPTION_EVENTS } from '../../../types/webhook';
+import { DEFAULT_SUBSCRIPTION_EVENTS } from '@/types/webhook';
 
 export const watch = createCommand({
     name: 'github',
@@ -35,7 +35,7 @@ export const watch = createCommand({
             if (!hasAdminPermission) {
                 await interaction.reply({
                     content: '🚫 You need **Administrator** or **Manage Server** permissions to execute this command.',
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
                 return;
             }
@@ -88,7 +88,7 @@ export const watch = createCommand({
             if (interaction.deferred) {
                 await interaction.editReply(errorMessage);
             } else if (!interaction.replied) {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
+                await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
             }
         }
     },

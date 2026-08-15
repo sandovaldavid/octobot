@@ -1,6 +1,7 @@
-import { Collection, ChatInputCommandInteraction } from 'discord.js';
+import { Collection, ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 import { debug } from '@utils/logger';
 import { github } from './github';
+import { ghCommand } from './gh';
 
 export interface DiscordCommand {
     data: any;
@@ -24,6 +25,7 @@ class CommandRegistry {
     }
 
     private registerCommands() {
+        this.commands.set(ghCommand.data.name, ghCommand);
         this.commands.set(github.data.name, github);
         debug.info('Commands registered:', Array.from(this.commands.keys()));
     }
@@ -48,7 +50,7 @@ class CommandRegistry {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: 'There was an error executing this command!',
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
             }
         }
@@ -57,4 +59,4 @@ class CommandRegistry {
 
 export const commandRegistry = CommandRegistry.getInstance();
 
-export { github };
+export { github, ghCommand };

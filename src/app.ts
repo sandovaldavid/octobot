@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 import mongoose from 'mongoose';
+import githubOnboardingRoutes from '@routes/githubOnboardingRoutes';
 import webhookRoutes from '@routes/webhookRoutes';
 
 interface AppDependencies {
@@ -29,8 +30,9 @@ export function createApp({
         })
     );
 
-    // Public HTTP surface: webhook ingress, liveness, and readiness
+    // Public HTTP surface: webhook ingress, onboarding handshake, liveness, and readiness
     app.use('/api/webhooks', webhookRoutes);
+    app.use('/api/github', githubOnboardingRoutes);
 
     // 1. Liveness check: confirms the HTTP process is running
     app.get('/health', (_req, res) => {
