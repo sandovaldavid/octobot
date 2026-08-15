@@ -74,7 +74,7 @@ graph TD
     DiscordClient -->|Alerts| DiscordChannel[Discord Channel]
 
     DiscordAdmin[Discord Admin] -->|/gh connect| DiscordClient
-    DiscordClient -->|Generate Signed Nonce| Onboard
+    DiscordClient -->|Generate Opaque Nonce (Hashed at rest)| Onboard
     Onboard -->|PKCE Exchange & Verify Association| GH_OAuth
     Onboard -->|Upsert Tenant Link| Conns
     Onboard -->|Upsert Installation| Insts
