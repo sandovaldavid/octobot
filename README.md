@@ -40,48 +40,49 @@ OctoBot está diseñado como un **GitHub Workflow Assistant** enfocado, multi-te
 ## 🏛️ Arquitectura y Persistencia Multi-Tenant
 
 ```mermaid
-graph TD
-    subgraph GitHub ["GitHub Cloud"]
-        GH_App["GitHub App Webhooks"]
-        GH_OAuth["OAuth 2.0 PKCE"]
-        GH_API["Installation REST API"]
-    end
 
-    subgraph OctoBot ["OctoBot Runtime"]
-        Ingress["Express Ingress: /api/webhooks/github"]
-        HMAC["verifyGithubWebhook Middleware"]
-        Onboard["Onboarding Controller: /setup & /callback"]
-        Router["Fail-Closed Subscription Router"]
-        DiscordClient["Discord Bot Client"]
-        ClientResolver["GitHubClientResolver"]
-    end
+    graph TD
+        subgraph GitHub ["GitHub Cloud"]
+            GH_App["GitHub App Webhooks"]
+            GH_OAuth["OAuth 2.0 PKCE"]
+            GH_API["Installation REST API"]
+        end
 
-    subgraph Storage ["MongoDB: Operational State Only"]
-        Insts[("GitHubInstallations")]
-        Conns[("DiscordGuildConnections")]
-        Subs[("Subscriptions")]
-        Attempts[("GitHubConnectionAttempts (TTL)")]
-        Deliveries[("WebhookDeliveries (TTL)")]
-    end
+        subgraph OctoBot ["OctoBot Runtime"]
+            Ingress["Express Ingress: /api/webhooks/github"]
+            HMAC["verifyGithubWebhook Middleware"]
+            Onboard["Onboarding Controller: /setup & /callback"]
+            Router["Fail-Closed Subscription Router"]
+            DiscordClient["Discord Bot Client"]
+            ClientResolver["GitHubClientResolver"]
+        end
 
-    GH_App -->|"POST rawBody + x-hub-signature-256"| Ingress
-    Ingress --> HMAC
-    HMAC --> Router
-    Router -->|"Verify Tenant Connection"| Conns
-    Router -->|"Verify Installation Status"| Insts
-    Router -->|"Match Channel Subscriptions"| Subs
-    Router -->|"Dispatch Notification Embed"| DiscordClient
-    DiscordClient -->|"Alerts"| DiscordChannel["Discord Channel"]
+        subgraph Storage ["MongoDB: Operational State Only"]
+            Insts[("GitHubInstallations")]
+            Conns[("DiscordGuildConnections")]
+            Subs[("Subscriptions")]
+            Attempts[("GitHubConnectionAttempts (TTL)")]
+            Deliveries[("WebhookDeliveries (TTL)")]
+        end
 
-    DiscordAdmin["Discord Admin"] -->|"/gh connect"| DiscordClient
-    DiscordClient -->|"Generate Opaque Nonce (Hashed at rest)"| Onboard
-    Onboard -->|"PKCE Exchange & Verify Association"| GH_OAuth
-    Onboard -->|"Upsert Tenant Link"| Conns
-    Onboard -->|"Upsert Installation"| Insts
+        GH_App -->|"POST rawBody + x-hub-signature-256"| Ingress
+        Ingress --> HMAC
+        HMAC --> Router
+        Router -->|"Verify Tenant Connection"| Conns
+        Router -->|"Verify Installation Status"| Insts
+        Router -->|"Match Channel Subscriptions"| Subs
+        Router -->|"Dispatch Notification Embed"| DiscordClient
+        DiscordClient -->|"Alerts"| DiscordChannel["Discord Channel"]
 
-    DiscordUser["Discord User"] -->|"/gh issues list"| DiscordClient
-    DiscordClient --> ClientResolver
-    ClientResolver -->|"Installation-scoped client"| GH_API
+        DiscordAdmin["Discord Admin"] -->|"/gh connect"| DiscordClient
+        DiscordClient -->|"Generate Opaque Nonce (Hashed at rest)"| Onboard
+        Onboard -->|"PKCE Exchange & Verify Association"| GH_OAuth
+        Onboard -->|"Upsert Tenant Link"| Conns
+        Onboard -->|"Upsert Installation"| Insts
+
+        DiscordUser["Discord User"] -->|"/gh issues list"| DiscordClient
+        DiscordClient --> ClientResolver
+        ClientResolver -->|"Installation-scoped client"| GH_API
 ```
 
 ### Datos Persistidos en MongoDB
