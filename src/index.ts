@@ -1,5 +1,3 @@
-import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
 import { REST, Routes } from 'discord.js';
 import { connectDB } from '@config/databaseConfig';
@@ -7,9 +5,7 @@ import { discordClient } from '@config/discordConfig';
 import { debug, logger } from '@utils/logger';
 import { githubClient } from '@config/githubConfig';
 import { commandRegistry } from '@commands/index';
-import repositoryRoutes from '@routes/repositoryRoutes';
-import issueRoutes from '@routes/issueRoutes';
-import webhookRoutes from '@routes/webhookRoutes';
+import { createApp } from '@/app';
 
 dotenv.config();
 
@@ -41,36 +37,9 @@ const initializeServices = async () => {
             logger.warn('Webhook configuration failed - Some notifications may not work');
         }
 
-        // Setup Express server
-        const app = express();
+        const app = createApp({ client, webhookConnected });
         const PORT = process.env.PORT || 4000;
 
-        app.use(cors());
-        app.use(
-            express.json({
-                verify: (req: any, _res, buf) => {
-                    req.rawBody = buf;
-                },
-            })
-        );
-
-        // Routes
-        app.use('/api/repositories', repositoryRoutes);
-        app.use('/api/issues', issueRoutes);
-        app.use('/api/webhooks', webhookRoutes);
-
-        // Health check endpoint
-        app.get('/health', (req, res) => {
-            res.json({
-                status: 'OK',
-                timestamp: new Date().toISOString(),
-                discord: client.isReady() ? 'Connected' : 'Disconnected',
-                webhook: webhookConnected ? 'Configured' : 'Not Configured',
-                database: 'Connected',
-            });
-        });
-
-        // Start server
         app.listen(PORT, () => {
             logger.info(`Server running on port ${PORT}`);
             logger.info('Service Status:');
