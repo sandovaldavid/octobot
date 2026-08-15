@@ -52,6 +52,7 @@ export const repositoryController = {
                     success: false,
                     error: 'Repository name is required',
                 });
+                return;
             }
 
             if (topics && !Array.isArray(topics)) {
@@ -59,6 +60,7 @@ export const repositoryController = {
                     success: false,
                     error: 'Topics must be an array of strings',
                 });
+                return;
             }
 
             const result = await repositoryService.createRepository({
@@ -117,6 +119,7 @@ export const repositoryController = {
                     success: false,
                     error: githubResult.error,
                 });
+                return;
             }
 
             try {
@@ -128,6 +131,7 @@ export const repositoryController = {
                     success: false,
                     error: 'Repository deleted from GitHub but database update failed',
                 });
+                return;
             }
 
             res.status(200).json({
@@ -153,6 +157,7 @@ export const repositoryController = {
                     success: false,
                     error: 'Repository not found',
                 });
+                return;
             }
 
             res.json({
@@ -175,6 +180,7 @@ export const repositoryController = {
                     success: false,
                     error: 'Repository not found',
                 });
+                return;
             }
 
             res.json({
@@ -194,6 +200,7 @@ export const repositoryController = {
 
             if (!result.success) {
                 res.status(400).json(result);
+                return;
             }
 
             res.json(result);
@@ -213,6 +220,7 @@ export const repositoryController = {
                     success: false,
                     error: 'Repository not found',
                 });
+                return;
             }
 
             const result = await repositoryService.updateRepository(repoName, {
@@ -263,6 +271,7 @@ export const repositoryController = {
                     success: false,
                     error: 'Topics must be an array of strings',
                 });
+                return;
             }
 
             const result = await repositoryService.updateRepository(repoName, { topics });

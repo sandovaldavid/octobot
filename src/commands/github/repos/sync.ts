@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
 import { repositoryService } from '@services/github/repositoryService';
 import { debug } from '@utils/logger';
 import { createCommand } from '@utils/commandBuilder';
@@ -20,6 +20,19 @@ export const sync = createCommand({
         if (subcommand !== 'sync') return;
 
         try {
+            const memberPermissions = interaction.memberPermissions;
+            const hasAdminPermission =
+                memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+                memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+
+            if (!hasAdminPermission) {
+                await interaction.reply({
+                    content: '🚫 You need **Administrator** or **Manage Server** permissions to execute this command.',
+                    ephemeral: true,
+                });
+                return;
+            }
+
             await interaction.deferReply();
 
             debug.info('Starting repository synchronization');
@@ -42,7 +55,14 @@ export const sync = createCommand({
             );
         } catch (error) {
             debug.error('Error in sync command:', error);
-            await interaction.editReply('❌ Failed to sync repositories. Please try again later.');
+            if (interaction.deferred) {
+                await interaction.editReply('❌ Failed to sync repositories. Please try again later.');
+            } else if (!interaction.replied) {
+                await interaction.reply({
+                    content: '❌ Failed to sync repositories. Please try again later.',
+                    ephemeral: true,
+                });
+            }
         }
     },
 });

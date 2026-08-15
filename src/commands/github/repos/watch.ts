@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
 import { RepositoryModel } from '@models/repository';
 import { webhookService } from '@services/github/webhookService';
 import { debug } from '@utils/logger';
@@ -26,6 +26,19 @@ export const watch = createCommand({
     },
     async execute(interaction: ChatInputCommandInteraction) {
         try {
+            const memberPermissions = interaction.memberPermissions;
+            const hasAdminPermission =
+                memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+                memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+
+            if (!hasAdminPermission) {
+                await interaction.reply({
+                    content: '🚫 You need **Administrator** or **Manage Server** permissions to execute this command.',
+                    ephemeral: true,
+                });
+                return;
+            }
+
             await interaction.deferReply();
             const repoName = interaction.options.getString('name', true);
             const channelId = interaction.channelId;
@@ -64,7 +77,7 @@ export const watch = createCommand({
 
             if (interaction.deferred) {
                 await interaction.editReply(errorMessage);
-            } else {
+            } else if (!interaction.replied) {
                 await interaction.reply({ content: errorMessage, ephemeral: true });
             }
         }

@@ -65,6 +65,7 @@ export const getIssues = async (req: Request, res: Response): Promise<void> => {
                 success: false,
                 error: 'Invalid query parameters',
             });
+            return;
         }
 
         const query = buildQuery(params);
@@ -114,12 +115,14 @@ export const getIssueById = async (req: Request, res: Response): Promise<void> =
                 success: false,
                 error: 'Invalid issue number',
             });
+            return;
         }
 
         const issue = await issueService.getIssueById(Number(issueNumber), repo as string);
 
         if (!issue.success) {
             res.status(404).json(issue);
+            return;
         }
 
         res.json(issue);
@@ -131,17 +134,6 @@ export const getIssueById = async (req: Request, res: Response): Promise<void> =
         });
     }
 };
-
-// export const createIssue = async (req: Request, res: Response): Promise<void> => {
-//     try {
-//         const { title, body, labels } = req.body;
-//         const issue = await issueService.createIssue(title, body, labels);
-//         res.status(201).json(issue);
-//     } catch (error) {
-//         debug.error('Error in createIssue controller:', error);
-//         res.status(500).json({ error: 'Internal Server Error' });
-//     }
-// };
 
 export const syncIssues = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -155,6 +147,7 @@ export const syncIssues = async (req: Request, res: Response): Promise<void> => 
                 success: false,
                 error: 'No repositories found in database. Please sync repositories first using /github repo sync',
             });
+            return;
         }
 
         const syncResult = await issueService.syncIssues();
@@ -165,6 +158,7 @@ export const syncIssues = async (req: Request, res: Response): Promise<void> => 
                 success: false,
                 error: syncResult.error || 'Failed to sync issues. Please try again later.',
             });
+            return;
         }
 
         const { total, synced } = syncResult.data as SyncResult;
@@ -194,6 +188,7 @@ export const syncIssues = async (req: Request, res: Response): Promise<void> => 
                 error: 'Invalid data format',
                 details: (error as Error).message,
             });
+            return;
         }
 
         if ((error as any).code === 11000) {
@@ -202,6 +197,7 @@ export const syncIssues = async (req: Request, res: Response): Promise<void> => 
                 error: 'Duplicate issue detected',
                 details: (error as Error).message,
             });
+            return;
         }
 
         res.status(500).json({
@@ -221,6 +217,7 @@ export const getIssuesByRepository = async (req: Request, res: Response): Promis
                 success: false,
                 error: 'Repository name is required',
             });
+            return;
         }
 
         const repository = await RepositoryModel.findOne({ name: repoName });
@@ -230,6 +227,7 @@ export const getIssuesByRepository = async (req: Request, res: Response): Promis
                 success: false,
                 error: `Repository '${repoName}' not found. Please sync repositories first using /github repo sync`,
             });
+            return;
         }
 
         const queryParams = parseQueryParams(req.query);
@@ -239,6 +237,7 @@ export const getIssuesByRepository = async (req: Request, res: Response): Promis
                 error: 'Invalid query parameters',
                 details: 'Please check state, sort, and direction values',
             });
+            return;
         }
 
         const result = await issueService.getIssuesByRepository(repoName, {
@@ -257,6 +256,7 @@ export const getIssuesByRepository = async (req: Request, res: Response): Promis
                 success: false,
                 error: result.error || `Failed to fetch issues for repository ${repoName}`,
             });
+            return;
         }
 
         debug.info(`Retrieved ${result.data?.length ?? 0} issues for repository ${repoName}`);
@@ -291,6 +291,7 @@ export const getIssuesByRepository = async (req: Request, res: Response): Promis
                 error: 'Invalid data format',
                 details: error.message,
             });
+            return;
         }
 
         res.status(500).json({
@@ -317,7 +318,6 @@ const parseQueryParams = (query: any): QueryParams => {
 export const issueController = {
     getIssues,
     getIssueById,
-    // createIssue,
     syncIssues,
     getIssuesByRepository,
 };

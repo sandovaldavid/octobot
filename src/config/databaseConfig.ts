@@ -3,7 +3,7 @@ import { debug, logger } from '@utils/logger';
 
 export const connectDB = async (): Promise<void> => {
     try {
-        const dbName = process.env.MONGODB_DB_NAME;
+        const dbName = process.env.MONGODB_DB_NAME || process.env.MONGO_DATABASE;
         const uri = process.env.MONGODB_URI;
 
         if (!uri) {
@@ -11,7 +11,7 @@ export const connectDB = async (): Promise<void> => {
         }
 
         const conn = await mongoose.connect(uri, {
-            dbName: dbName,
+            ...(dbName ? { dbName } : {}),
         });
 
         logger.info(`MongoDB Connected: ${conn.connection.host}`);
