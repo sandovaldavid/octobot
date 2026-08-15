@@ -88,3 +88,16 @@ export class GitHubInstallationResolver implements IGitHubInstallationResolver {
         };
     }
 }
+
+let defaultInstallationResolver: IGitHubInstallationResolver | null = null;
+
+export function getGitHubInstallationResolver(): IGitHubInstallationResolver {
+    if (!defaultInstallationResolver) {
+        defaultInstallationResolver = new GitHubInstallationResolver();
+    }
+    return defaultInstallationResolver;
+}
+
+export function setGitHubInstallationResolver(resolver: IGitHubInstallationResolver | null): void {
+    defaultInstallationResolver = resolver;
+}

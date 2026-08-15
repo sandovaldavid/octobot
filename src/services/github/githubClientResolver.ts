@@ -1,4 +1,5 @@
 import { App, Octokit } from 'octokit';
+import { getGitHubAppConfig } from '@config/githubAppConfig';
 
 export interface GitHubClientResolverOptions {
     maxEntries?: number;
@@ -76,4 +77,29 @@ export class GitHubClientResolver implements IGitHubClientResolver {
             this.clients.delete(oldestId);
         }
     }
+}
+
+let defaultClientResolver: IGitHubClientResolver | null = null;
+
+export function getGitHubClientResolver(): IGitHubClientResolver {
+    if (!defaultClientResolver) {
+        const config = getGitHubAppConfig();
+        const app = new App({
+            appId: config.appId,
+            privateKey: config.privateKey,
+            oauth: {
+                clientId: config.clientId,
+                clientSecret: config.clientSecret,
+            },
+            webhooks: {
+                secret: config.webhookSecret,
+            },
+        });
+        defaultClientResolver = new GitHubClientResolver(app);
+    }
+    return defaultClientResolver;
+}
+
+export function setGitHubClientResolver(resolver: IGitHubClientResolver | null): void {
+    defaultClientResolver = resolver;
 }
