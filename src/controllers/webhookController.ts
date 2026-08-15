@@ -1,24 +1,45 @@
 import { Request, Response } from 'express';
-import { handleGithubWebhook } from '@webhooks/handler';
+import { EventProcessor } from '@/pipeline/processor';
+import { VerifiedGithubDelivery } from '@/pipeline/types';
 import { debug } from '@utils/logger';
 
 export const webhookController = {
     async handleWebhook(req: Request, res: Response): Promise<void> {
         try {
-            const event = req.headers['x-github-event'] as string;
-            debug.info(`Processing verified webhook event: ${event}`);
+            const eventName = req.headers['x-github-event'] as string;
+            const deliveryId = (req.headers['x-github-delivery'] as string) || 'unknown-delivery';
 
-            await handleGithubWebhook(event, req.body);
+            const delivery: VerifiedGithubDelivery = {
+                deliveryId,
+                eventName,
+                receivedAt: new Date(),
+                payload: req.body || {},
+            };
+
+            const result = await EventProcessor.process(delivery);
+
+            if (result.outcome === 'failed' && result.error) {
+                res.status(500).json({
+                    success: false,
+                    error: 'Failed to process webhook delivery',
+                    deliveryId,
+                    outcome: result.outcome,
+                });
+                return;
+            }
 
             res.status(200).json({
                 success: true,
-                message: 'Webhook processed successfully',
+                deliveryId,
+                outcome: result.outcome,
+                matchedSubscriptions: result.matchedSubscriptions,
+                delivered: result.succeeded,
             });
         } catch (error) {
-            debug.error('Webhook processing error:', error);
+            debug.error('Webhook controller error:', error);
             res.status(500).json({
                 success: false,
-                error: 'Failed to process webhook',
+                error: 'Internal server error processing webhook',
             });
         }
     },
