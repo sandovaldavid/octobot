@@ -1,5 +1,5 @@
 import { DiscordGuildConnectionModel } from '@models/discordGuildConnection';
-import { GitHubInstallationModel, IGitHubInstallation } from '@models/githubInstallation';
+import { GitHubInstallationModel } from '@models/githubInstallation';
 import { GitHubInstallationContext } from '@/types/githubApp';
 import {
     GuildNotConnectedError,
@@ -61,10 +61,7 @@ export class GitHubInstallationResolver implements IGitHubInstallationResolver {
             .map((inst) => this.formatInstallationContext(inst));
     }
 
-    private validateAndFormatInstallation(
-        installation: IGitHubInstallation | null | undefined,
-        installationId: number
-    ): GitHubInstallationContext {
+    private validateAndFormatInstallation(installation: any, installationId: number): GitHubInstallationContext {
         if (!installation || installation.status === 'revoked') {
             throw new InstallationRevokedError(installationId);
         }
@@ -76,7 +73,7 @@ export class GitHubInstallationResolver implements IGitHubInstallationResolver {
         return this.formatInstallationContext(installation);
     }
 
-    private formatInstallationContext(installation: IGitHubInstallation): GitHubInstallationContext {
+    private formatInstallationContext(installation: any): GitHubInstallationContext {
         return {
             installationId: installation.installationId,
             accountId: installation.accountId,

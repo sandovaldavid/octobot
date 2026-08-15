@@ -31,13 +31,7 @@ export interface ProcessingResult {
 }
 
 export type PullRequestAction =
-    | 'opened'
-    | 'closed'
-    | 'reopened'
-    | 'synchronize'
-    | 'merged'
-    | 'ready_for_review'
-    | 'review_requested';
+    'opened' | 'closed' | 'reopened' | 'synchronize' | 'merged' | 'ready_for_review' | 'review_requested';
 
 export type PullRequestReviewAction = 'submitted' | 'edited' | 'dismissed';
 
@@ -202,5 +196,4 @@ export type NormalizedGithubEvent =
     | NormalizedUnsupportedEvent;
 
 export type NormalizationResult =
-    | { success: true; event: NormalizedGithubEvent }
-    | { success: false; reason: string; repositoryFullName?: string };
+    { success: true; event: NormalizedGithubEvent } | { success: false; reason: string; repositoryFullName?: string };
